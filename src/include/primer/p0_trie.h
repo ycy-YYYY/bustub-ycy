@@ -37,7 +37,9 @@ class TrieNode {
    *
    * @param key_char Key character of this trie node
    */
-  explicit TrieNode(char key_char) {}
+  explicit TrieNode(char key_char) {
+   
+  }
 
   /**
    * TODO(P0): Add implementation
