@@ -37,9 +37,7 @@ class TrieNode {
    *
    * @param key_char Key character of this trie node
    */
-  explicit TrieNode(char key_char) {
-   
-  }
+  explicit TrieNode(char key_char) : key_char_(key_char) { is_end_ = false; }
 
   /**
    * TODO(P0): Add implementation
@@ -64,7 +62,7 @@ class TrieNode {
    * @param key_char Key char of child node.
    * @return True if this trie node has a child with given key, false otherwise.
    */
-  bool HasChild(char key_char) const { return false; }
+  bool HasChild(char key_char) const { return children_.count(key_char) != 0U;}
 
   /**
    * TODO(P0): Add implementation
@@ -74,7 +72,7 @@ class TrieNode {
    *
    * @return True if this trie node has any child node, false if it has no child node.
    */
-  bool HasChildren() const { return false; }
+  bool HasChildren() const { return !children_.empty(); }
 
   /**
    * TODO(P0): Add implementation
