@@ -257,7 +257,7 @@ class Trie {
 
   /**
    *
-   * @brief Helper method for insert key-value pair into th  
+   * @brief Helper method for insert key-value pair into th
    * @param index Current index
    * @param parent Pointer points to parent node
    * @return True if insertion succeeds, false if key already exists
@@ -275,12 +275,12 @@ class Trie {
         }
         // The key do not exist, transform TrieNode to TrieNode with value
         (*cur)->RemoveChildNode(key[index]);
-        auto ptr = std::make_unique<TrieNodeWithValue>(*child, value);
+        auto ptr = std::make_unique<TrieNodeWithValue<T>>(key[index], value);
         (*cur)->InsertChildNode(key[index], std::move(ptr));
         return true;
       }
       // Do not contains that child, create a new end child
-      (*cur)->InsertChildNode(key[index], std::make_unique(TrieNodeWithValue(key[index], value)));
+      (*cur)->InsertChildNode(key[index], std::make_unique<TrieNodeWithValue<T>>(key[index], value));
       return true;
     }
 
@@ -292,29 +292,27 @@ class Trie {
     auto res = Insert(key, value, ++index, child);
     return res;
   }
-  
-  
 
   auto Remove(const std::string &key, size_t index, std::unique_ptr<TrieNode> *cur) -> bool {
     auto child = (*cur)->GetChildNode(key[index]);
     if (index == key.size() - 1) {
-      if(child == nullptr){
+      if (child == nullptr) {
         return false;
       }
-      if(!(*child)->IsEndNode()){
+      if (!(*child)->IsEndNode()) {
         return false;
       }
       // First set isEnd flag
       (*child)->SetEndNode(false);
-      if(!(*child)->HasChildren()){
+      if (!(*child)->HasChildren()) {
         (*cur)->RemoveChildNode(key[index]);
       }
       return true;
     }
-    auto res = Remove(key,++index,child);
-    // If successfully deleted, check empty children
-    if(res){
-      if (!(*child)->HasChildren()) {
+    auto res = Remove(key, ++index, child);
+    // If successfully deleted, check if child has no children and child is not end node
+    if (res) {
+      if (!(*child)->HasChildren() && !(*child)->IsEndNode()) {
         (*cur)->RemoveChildNode(key[index]);
       }
     }
@@ -358,10 +356,16 @@ class Trie {
    */
   template <typename T>
   auto Insert(const std::string &key, T value) -> bool {
+    latch_.RLock();
     if (key.empty()) {
+      latch_.RUnlock();
       return false;
     }
-    return Insert(key, value, 0, root_);
+    latch_.RUnlock();
+    latch_.WLock();
+    auto res = Insert<T>(key, value, 0, &root_);
+    latch_.WUnlock();
+    return res;
   }
 
   /**
@@ -381,12 +385,16 @@ class Trie {
    * @param key Key used to traverse the trie and find correct node
    * @return True if key exists and is removed, false otherwise
    */
-  auto Remove(const std::string &key) -> bool { 
-    if(key.empty()){
+  auto Remove(const std::string &key) -> bool {
+    latch_.WLock();
+    if (key.empty()) {
+      latch_.WUnlock();
       return false;
     }
-    return Remove(key,0,&root_);
-   }
+    auto res = Remove(key, 0, &root_);
+    latch_.WUnlock();
+    return res;
+  }
 
   /**
    * TODO(P0): Add implementation
@@ -408,8 +416,38 @@ class Trie {
    */
   template <typename T>
   auto GetValue(const std::string &key, bool *success) -> T {
+    latch_.RLock();
+    // 1) If key is empty
     *success = false;
-    return {};
+    if (key.empty()) {
+      latch_.RUnlock();
+      return {};
+    }
+    size_t index = 0;
+    auto cur_ptr = &root_;
+    while (index < key.size()) {
+      auto child = (*cur_ptr)->GetChildNode(key[index]);
+      if (child == nullptr) {
+        break;
+      }
+      cur_ptr = child;
+      index++;
+    }
+    // 2) If trie do not contains key
+    if (index != key.size()) {
+      latch_.RUnlock();
+      return {};
+    }
+    // 3) If node hold  not type T value
+    auto ptr = dynamic_cast<TrieNodeWithValue<T> *>((*cur_ptr).get());
+    if (ptr == nullptr) {
+      latch_.RUnlock();
+      return {};
+    }
+    // 4) Returm the value
+    *success = true;
+    latch_.RUnlock();
+    return ptr->GetValue();
   }
 };
 }  // namespace bustub
