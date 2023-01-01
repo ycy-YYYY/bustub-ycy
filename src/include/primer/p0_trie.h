@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/rwlatch.h"
 
 namespace bustub {
@@ -274,9 +275,7 @@ class Trie {
           return false;
         }
         // The key do not exist, transform TrieNode to TrieNode with value
-        (*cur)->RemoveChildNode(key[index]);
-        auto ptr = std::make_unique<TrieNodeWithValue<T>>(key[index], value);
-        (*cur)->InsertChildNode(key[index], std::move(ptr));
+        (*child) = std::make_unique<TrieNodeWithValue<T>>(std::move(**child), value);
         return true;
       }
       // Do not contains that child, create a new end child
@@ -289,27 +288,35 @@ class Trie {
       (*cur)->InsertChildNode(key[index], std::make_unique<TrieNode>(key[index]));
       child = (*cur)->GetChildNode(key[index]);
     }
-    auto res = Insert(key, value, ++index, child);
+    auto res = Insert(key, value, index + 1, child);
     return res;
   }
 
   auto Remove(const std::string &key, size_t index, std::unique_ptr<TrieNode> *cur) -> bool {
+    if (index >= key.size()) {
+      return false;
+    }
     auto child = (*cur)->GetChildNode(key[index]);
+    // First check if cur node have that child
+    if (child == nullptr) {
+      return false;
+    }
+    // If reach trie 's end
     if (index == key.size() - 1) {
-      if (child == nullptr) {
-        return false;
-      }
       if (!(*child)->IsEndNode()) {
         return false;
       }
-      // First set isEnd flag
+      // Remove the end node
+      // Set isend -> false
       (*child)->SetEndNode(false);
+      // Transform TrieNodeWithValue to TrieNode
+      (*child) = std::make_unique<TrieNode>(std::move(**child));
       if (!(*child)->HasChildren()) {
         (*cur)->RemoveChildNode(key[index]);
       }
       return true;
     }
-    auto res = Remove(key, ++index, child);
+    auto res = Remove(key, index + 1, child);
     // If successfully deleted, check if child has no children and child is not end node
     if (res) {
       if (!(*child)->HasChildren() && !(*child)->IsEndNode()) {
@@ -438,13 +445,18 @@ class Trie {
       latch_.RUnlock();
       return {};
     }
-    // 3) If node hold  not type T value
+    // 3) If node is not an end node (been removed)
+    if (!(*cur_ptr)->IsEndNode()) {
+      latch_.RUnlock();
+      return {};
+    }
+    // 4) If node hold  not type T value
     auto ptr = dynamic_cast<TrieNodeWithValue<T> *>((*cur_ptr).get());
     if (ptr == nullptr) {
       latch_.RUnlock();
       return {};
     }
-    // 4) Returm the value
+    // Returm the value
     *success = true;
     latch_.RUnlock();
     return ptr->GetValue();

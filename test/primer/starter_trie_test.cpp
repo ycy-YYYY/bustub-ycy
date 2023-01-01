@@ -10,8 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <bits/types/FILE.h>
 #include <bitset>
 #include <functional>
+#include <iostream>
 #include <numeric>
 #include <random>
 #include <thread>  // NOLINT
@@ -127,8 +129,17 @@ TEST(StarterTest, TrieInsertTest) {
     trie.GetValue<int>("aaaa", &success);
     EXPECT_EQ(success, false);
   }
-}
 
+  // Insert test
+  {
+    Trie trie;
+    bool success = trie.Insert<int>("aaaa", 0);
+    success = trie.Insert<int>("aaa", 5);
+    success = trie.Insert<int>("aaaa", 6);
+    EXPECT_EQ(trie.GetValue<int>("aaaa", &success), 0);
+    EXPECT_EQ(trie.GetValue<int>("aaa", &success), 5);
+  }
+}
 TEST(StarterTrieTest, RemoveTest) {
   {
     Trie trie;
@@ -160,9 +171,22 @@ TEST(StarterTrieTest, RemoveTest) {
     success = trie.Remove("aaa");
     EXPECT_EQ(success, true);
   }
+
+  // Remove on empty trie
+  {
+    Trie trie;
+    bool success = trie.Remove("a");
+    EXPECT_EQ(success, false);
+    success = trie.Insert<int>("abcde", 5);
+    EXPECT_EQ(success, true);
+    success = trie.Remove("abcde");
+    EXPECT_EQ(success, true);
+    success = trie.Remove("av");
+    EXPECT_EQ(success, success);
+  }
 }
 
-TEST(StarterTrieTest,ConcurrentTest1) {
+TEST(StarterTrieTest, ConcurrentTest1) {
   Trie trie;
   constexpr int num_words = 1000;
   constexpr int num_bits = 10;
