@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -24,7 +25,8 @@
 #include <vector>
 
 #include "container/hash/hash_table.h"
-
+#include "common/rwlatch.h"
+#include "common/logger.h"
 namespace bustub {
 
 /**
@@ -37,8 +39,8 @@ class ExtendibleHashTable : public HashTable<K, V> {
  public:
   /**
    *
-   * TODO(P1): Add implementation
-   *
+   * TODO:(P1): Add implementation
+   * bucket_num == 2 when HashTable was created, since global depth are set to 1
    * @brief Create a new ExtendibleHashTable.
    * @param bucket_size: fixed size for each bucket
    */
@@ -65,7 +67,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
   /**
    *
-   * TODO(P1): Add implementation
+   * TODO:(P1): Add implementation
    *
    * @brief Find the value associated with the given key.
    *
@@ -79,7 +81,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
   /**
    *
-   * TODO(P1): Add implementation
+   * TODO:(P1): Add implementation
    *
    * @brief Insert the given key-value pair into the hash table.
    * If a key already exists, the value should be updated.
@@ -96,7 +98,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
   /**
    *
-   * TODO(P1): Add implementation
+   * TODO:(P1): Add implementation
    *
    * @brief Given the key, remove the corresponding key-value pair in the hash table.
    * Shrink & Combination is not required for this project
@@ -119,13 +121,13 @@ class ExtendibleHashTable : public HashTable<K, V> {
     inline auto GetDepth() const -> int { return depth_; }
 
     /** @brief Increment the local depth of a bucket. */
-    inline void IncrementDepth() { depth_++; }
+    inline void IncrementDepth() { depth_++; LOG_INFO("Incresed local depth, now depth = %d",depth_);}
 
     inline auto GetItems() -> std::list<std::pair<K, V>> & { return list_; }
 
     /**
      *
-     * TODO(P1): Add implementation
+     * TODO:(P1): Add implementation
      *
      * @brief Find the value associated with the given key in the bucket.
      * @param key The key to be searched.
@@ -136,7 +138,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
     /**
      *
-     * TODO(P1): Add implementation
+     * TODO:(P1) Add implementation
      *
      * @brief Given the key, remove the corresponding key-value pair in the bucket.
      * @param key The key to be deleted.
@@ -146,7 +148,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
     /**
      *
-     * TODO(P1): Add implementation
+     * TODO:(P1) Add implementation
      *
      * @brief Insert the given key-value pair into the bucket.
      *      1. If a key already exists, the value should be updated.
@@ -158,22 +160,23 @@ class ExtendibleHashTable : public HashTable<K, V> {
     auto Insert(const K &key, const V &value) -> bool;
 
    private:
-    // TODO(student): You may add additional private members and helper functions
+    // TODO(ycy): (student) You may add additional private members and helper functions
     size_t size_;
     int depth_;
     std::list<std::pair<K, V>> list_;
+    ReaderWriterLatch latch_;
   };
 
  private:
   // TODO(student): You may add additional private members and helper functions and remove the ones
   // you don't need.
 
-  int global_depth_;    // The global depth of the directory
-  size_t bucket_size_;  // The size of a bucket
-  int num_buckets_;     // The number of buckets in the hash table
+  int global_depth_{};    // The global depth of the directory
+  size_t bucket_size_{};  // The size of a bucket
+  int num_buckets_{};     // The number of buckets in the hash table
   mutable std::mutex latch_;
   std::vector<std::shared_ptr<Bucket>> dir_;  // The directory of the hash table
-
+  
   // The following functions are completely optional, you can delete them if you have your own ideas.
 
   /**
@@ -181,6 +184,17 @@ class ExtendibleHashTable : public HashTable<K, V> {
    * @param bucket The bucket to be redistributed.
    */
   auto RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void;
+
+
+      /**
+       * @brief Increase the Global_depth and double the vector size
+       */
+      auto IncrementGlobalDepth() -> void;
+
+  /**
+   * @brief Increase the Number of buckets
+   */
+  auto IncrementNumberOfBuckets() ->void;
 
   /*****************************************************************
    * Must acquire latch_ first before calling the below functions. *
@@ -192,6 +206,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
    * @return The entry index in the directory.
    */
   auto IndexOf(const K &key) -> size_t;
+
 
   auto GetGlobalDepthInternal() const -> int;
   auto GetLocalDepthInternal(int dir_index) const -> int;

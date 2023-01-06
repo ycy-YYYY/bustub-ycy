@@ -32,7 +32,6 @@ namespace bustub {
 class TrieNode {
  public:
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Construct a new Trie Node object with the given key char.
    * is_end_ flag should be initialized to false in this constructor.
@@ -42,7 +41,6 @@ class TrieNode {
   explicit TrieNode(char key_char) : key_char_(key_char) { is_end_ = false; }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Move constructor for trie node object. The unique pointers stored
    * in children_ should be moved from other_trie_node to new trie node.
@@ -62,7 +60,6 @@ class TrieNode {
   virtual ~TrieNode() = default;
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Whether this trie node has a child node with specified key char.
    *
@@ -72,7 +69,6 @@ class TrieNode {
   auto HasChild(char key_char) const -> bool { return children_.count(key_char) != 0; }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Whether this trie node has any children at all. This is useful
    * when implementing 'Remove' functionality.
@@ -91,7 +87,6 @@ class TrieNode {
   auto IsEndNode() const -> bool { return is_end_; }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Return key char of this trie node.
    *
@@ -100,7 +95,6 @@ class TrieNode {
   auto GetKeyChar() const -> char { return key_char_; }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Insert a child node for this trie node into children_ map, given the key char and
    * unique_ptr of the child node. If specified key_char already exists in children_,
@@ -132,7 +126,6 @@ class TrieNode {
   }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Get the child node given its key char. If child node for given key char does
    * not exist, return nullptr.
@@ -150,7 +143,6 @@ class TrieNode {
   }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Remove child node from children_ map.
    * If key_char does not exist in children_, return immediately.
@@ -168,7 +160,6 @@ class TrieNode {
   }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Set the is_end_ flag to true or false.
    *
@@ -198,7 +189,6 @@ class TrieNodeWithValue : public TrieNode {
 
  public:
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Construct a new TrieNodeWithValue object from a TrieNode object and specify its value.
    * This is used when a non-terminal TrieNode is converted to terminal TrieNodeWithValue.
@@ -218,7 +208,6 @@ class TrieNodeWithValue : public TrieNode {
   TrieNodeWithValue(TrieNode &&trieNode, T value) : TrieNode(std::move(trieNode)), value_(value) { is_end_ = true; }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Construct a new TrieNodeWithValue. This is used when a new terminal node is constructed.
    *
@@ -328,7 +317,6 @@ class Trie {
 
  public:
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Construct a new Trie object. Initialize the root node with '\0'
    * character.
@@ -404,7 +392,6 @@ class Trie {
   }
 
   /**
-   * TODO(P0): Add implementation
    *
    * @brief Get the corresponding value of type T given its key.
    * If key is empty, set success to false.
