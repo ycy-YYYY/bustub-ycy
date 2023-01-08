@@ -121,7 +121,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
     inline auto GetDepth() const -> int { return depth_; }
 
     /** @brief Increment the local depth of a bucket. */
-    inline void IncrementDepth() { depth_++; LOG_INFO("Incresed local depth, now depth = %d",depth_);}
+    inline void IncrementDepth() { depth_++;}
 
     inline auto GetItems() -> std::list<std::pair<K, V>> & { return list_; }
 
@@ -159,6 +159,12 @@ class ExtendibleHashTable : public HashTable<K, V> {
      */
     auto Insert(const K &key, const V &value) -> bool;
 
+    /**
+     * @brief Erase all the element in the bucket
+     * 
+     */
+    auto Clear()->void;
+
    private:
     // TODO(ycy): (student) You may add additional private members and helper functions
     size_t size_;
@@ -175,6 +181,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
   size_t bucket_size_{};  // The size of a bucket
   int num_buckets_{};     // The number of buckets in the hash table
   mutable std::mutex latch_;
+  std::mutex lock_;       // Lock for split operation
   std::vector<std::shared_ptr<Bucket>> dir_;  // The directory of the hash table
   
   // The following functions are completely optional, you can delete them if you have your own ideas.

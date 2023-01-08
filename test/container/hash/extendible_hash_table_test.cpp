@@ -3,6 +3,7 @@
  */
 
 #include <memory>
+#include <string>
 #include <thread>  // NOLINT
 
 #include "container/hash/extendible_hash_table.h"
@@ -12,12 +13,14 @@ namespace bustub {
 
 TEST(ExtendibleHashTableTest,SampleTest) {
   auto table = std::make_unique<ExtendibleHashTable<int, std::string>>(2);
-
+  // Remove from empty table
+  EXPECT_FALSE(table->Remove(1));
   table->Insert(1, "a");
   table->Insert(2, "b");
   table->Insert(3, "c");
   table->Insert(4, "d");
   table->Insert(5, "e");
+  EXPECT_EQ(3,table->GetNumBuckets());
   table->Insert(6, "f");
   table->Insert(7, "g");
   table->Insert(8, "h");
@@ -40,11 +43,17 @@ TEST(ExtendibleHashTableTest,SampleTest) {
   EXPECT_TRUE(table->Remove(4));
   EXPECT_TRUE(table->Remove(1));
   EXPECT_FALSE(table->Remove(20));
+  // Find the key after it's been removed
+  EXPECT_FALSE(table->Find(8, result));
+  EXPECT_EQ(result, std::string());
+  EXPECT_FALSE(table->Remove(8));
+  EXPECT_FALSE(table->Find(20, result));
+  EXPECT_EQ(result,std::string());
 }
 
 TEST(ExtendibleHashTableTest,ConcurrentInsertTest) {
-  const int num_runs = 50;
-  const int num_threads = 3;
+  const int num_runs = 500;
+  const int num_threads = 4;
 
   // Run concurrent test multiple times to guarantee correctness.
   for (int run = 0; run < num_runs; run++) {
