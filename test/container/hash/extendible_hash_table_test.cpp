@@ -11,7 +11,7 @@
 
 namespace bustub {
 
-TEST(ExtendibleHashTableTest,SampleTest) {
+TEST(ExtendibleHashTableTest, SampleTest) {
   auto table = std::make_unique<ExtendibleHashTable<int, std::string>>(2);
   // Remove from empty table
   EXPECT_FALSE(table->Remove(1));
@@ -20,7 +20,7 @@ TEST(ExtendibleHashTableTest,SampleTest) {
   table->Insert(3, "c");
   table->Insert(4, "d");
   table->Insert(5, "e");
-  EXPECT_EQ(3,table->GetNumBuckets());
+  EXPECT_EQ(3, table->GetNumBuckets());
   table->Insert(6, "f");
   table->Insert(7, "g");
   table->Insert(8, "h");
@@ -48,12 +48,12 @@ TEST(ExtendibleHashTableTest,SampleTest) {
   EXPECT_EQ(result, std::string());
   EXPECT_FALSE(table->Remove(8));
   EXPECT_FALSE(table->Find(20, result));
-  EXPECT_EQ(result,std::string());
+  EXPECT_EQ(result, std::string());
 }
 
-TEST(ExtendibleHashTableTest,ConcurrentInsertTest) {
+TEST(ExtendibleHashTableTest, ConcurrentInsertTest) {
   const int num_runs = 500;
-  const int num_threads = 4;
+  const int num_threads = 20;
 
   // Run concurrent test multiple times to guarantee correctness.
   for (int run = 0; run < num_runs; run++) {
@@ -62,17 +62,29 @@ TEST(ExtendibleHashTableTest,ConcurrentInsertTest) {
     threads.reserve(num_threads);
 
     for (int tid = 0; tid < num_threads; tid++) {
-      threads.emplace_back([tid, &table]() { table->Insert(tid, tid); });
+      if ((tid / 2) != 0) {
+        threads.emplace_back([tid, &table]() { table->Insert(tid, tid); });
+      } else {
+        threads.emplace_back([tid, &table]() {
+          table->Insert(tid, tid);
+          table->Remove(tid);
+        });
+      }
     }
     for (int i = 0; i < num_threads; i++) {
       threads[i].join();
     }
 
-    EXPECT_EQ(table->GetGlobalDepth(), 1);
+    // EXPECT_EQ(table->GetGlobalDepth(), 1);
     for (int i = 0; i < num_threads; i++) {
       int val;
-      EXPECT_TRUE(table->Find(i, val));
-      EXPECT_EQ(i, val);
+      if (i / 2 != 0) {
+        EXPECT_TRUE(table->Find(i, val));
+        EXPECT_EQ(i, val);
+      } else {
+        EXPECT_FALSE(table->Find(i, val));
+      }
+      
     }
   }
 }

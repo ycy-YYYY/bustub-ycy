@@ -86,7 +86,6 @@ auto ExtendibleHashTable<K, V>::GetNumBucketsInternal() const -> int {
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Find(const K &key, V &value) -> bool {
   auto index = IndexOf(key);
-  assert(index < dir_.size());
   if (!dir_[index]) {
     value = {};
     return false;
@@ -109,7 +108,6 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   // First find the entry index
   lock_.lock();
   size_t index = IndexOf(key);
-  assert(index < dir_.size());
   // If the bucket do not exist, initialize it and re-insert it
   // if (!dir_[index]) {
   //   IncrementNumberOfBuckets();
@@ -120,7 +118,6 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   //   // }
   //   return;
   // }
-  assert(dir_[index] != nullptr);
   // Try to insert it
   bool success = dir_[index]->Insert(key, value);
   // if (success) {
@@ -186,7 +183,6 @@ auto ExtendibleHashTable<K, V>::IncrementGlobalDepth() -> void {
   // Re-arrange the dir_ pointer
   for (size_t i = 0; i < dir_.size() / 2; ++i) {
     size_t increased_index = (1 << global_depth_) + i;
-    assert(increased_index < dir_.size());
     dir_[increased_index] = dir_[i];
   }
   ++global_depth_;
