@@ -12,17 +12,21 @@
 
 #pragma once
 
+#include <cstddef>
 #include <list>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <vector>
 
 #include "buffer/buffer_pool_manager.h"
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
+#include "common/macros.h"
 #include "container/hash/extendible_hash_table.h"
 #include "recovery/log_manager.h"
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page.h"
+#include "storage/page/table_page.h"
 
 namespace bustub {
 
@@ -177,5 +181,56 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   }
 
   // TODO(student): You may add additional private members and helper functions
+ private:
+  std::vector<Page *> reuse_pages_;  // Reuseble page objects
+  std::mutex reuse_pages_latch_;     // Latch protect reuse_pages
+  /**
+   * @brief Evict one page from the frame using the lru-k policy
+   *
+   * @param[out] frame_id The empty frame id after eviction
+   * @return Return true if replace operation was success
+   */
+  auto EvictPageLRU(frame_id_t &frame_id) -> bool;
+
+  auto GetFrameIdFromFreeList(frame_id_t *frame_id) -> bool;
+
+  /**
+   * @brief If page is dirty, write page to disk, else return
+   *
+   * @param page
+   */
+  void RemoveOldPage(Page *page);
+
+  void DeleteOldPageDisk(Page *page);
+
+  /**
+   * @brief Access a page in the buffer pool
+   *        update the meta-data of the page, pin the page and access lru-k replacer and set it not evictable
+   * @param frame_id Insert place
+   * @param page The new page
+   */
+  void AccessPage(frame_id_t frame_id, Page *page);
+
+  /**
+   * @brief Fetch a page from disk, return the pointer to the page
+   *
+   * @param page_id,frame_id
+   * @return Page*, the pointer to the page
+   */
+  auto FetchPageFromDisk(page_id_t page_id, frame_id_t frame_id) -> Page *;
+
+  /**
+   * @brief Write page to disk and reset page memory, add page obj to the reuseble, this method should be called
+   *        after a page is evict or remove from the buffer pool
+   * @param page The pointer to the page
+   */
+  auto WritePageToDiskAndRemove(Page *page) -> void;
+
+  /**
+   * @brief Write the page to disk and unset dirty flag, this method should be called after flushing page
+   *
+   * @param page
+   */
+  auto WritePageToDisk(Page *page) -> void;
 };
 }  // namespace bustub

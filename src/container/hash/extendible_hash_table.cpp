@@ -85,28 +85,34 @@ auto ExtendibleHashTable<K, V>::GetNumBucketsInternal() const -> int {
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Find(const K &key, V &value) -> bool {
+  lock_.RLock();
   auto index = IndexOf(key);
   if (!dir_[index]) {
     value = {};
+    lock_.RUnlock();
     return false;
   }
+  lock_.RUnlock();
   return dir_[index]->Find(key, value);
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Remove(const K &key) -> bool {
+  lock_.RLock();
   size_t index = IndexOf(key);
   assert(index < dir_.size());
   if (!dir_[index]) {
+    lock_.RUnlock();
     return false;
   }
+  lock_.RUnlock();
   return dir_[index]->Remove(key);
 }
 
 template <typename K, typename V>
 void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   // First find the entry index
-  lock_.lock();
+  lock_.RLock();
   size_t index = IndexOf(key);
   // If the bucket do not exist, initialize it and re-insert it
   // if (!dir_[index]) {
@@ -124,10 +130,13 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   //   LOG_INFO("successfully insert key - value pair into bucket :%zu", index);
   // }
   if (success) {
-    lock_.unlock();
+    lock_.RUnlock();
     return;
   }
+
+  lock_.RUnlock();
   if (!success) {
+    lock_.WLock();
     // Check whether the bucket is full
     if (dir_[index]->IsFull()) {
       // If global depth == local depth
@@ -140,7 +149,7 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
       RedistributeBucket(dir_[index]);
       // Re-insert the key-value pair
     }
-    lock_.unlock();
+    lock_.WUnlock();
     Insert(key, value);
   }
 }
@@ -150,7 +159,7 @@ auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucke
   latch_.lock();
   // Create a new bucket
   size_t bucket_depth = bucket->GetDepth();
-  
+
   num_buckets_++;
   auto temp_ptr = std::make_shared<Bucket>(bucket_size_, bucket_depth);
   // Redistribute all key-value pair
@@ -168,12 +177,11 @@ auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucke
   // Clear the original bucket
   bucket->Clear();
   latch_.unlock();
-  
+
   for (auto &[key, value] : list) {
     auto index = IndexOf(key);
     dir_[index]->Insert(key, value);
   }
-  
 }
 
 template <typename K, typename V>

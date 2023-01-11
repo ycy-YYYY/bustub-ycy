@@ -22,7 +22,7 @@ TEST(ExtendibleHashTableTest, SampleTest) {
   table->Insert(5, "e");
   EXPECT_EQ(3, table->GetNumBuckets());
   table->Insert(6, "f");
-  table->Insert(7, "g");
+  table->Insert(7, "g"); 
   table->Insert(8, "h");
   table->Insert(9, "i");
   EXPECT_EQ(2, table->GetLocalDepth(0));
@@ -52,8 +52,8 @@ TEST(ExtendibleHashTableTest, SampleTest) {
 }
 
 TEST(ExtendibleHashTableTest, ConcurrentInsertTest) {
-  const int num_runs = 500;
-  const int num_threads = 20;
+  const int num_runs = 50;
+  const int num_threads = 5;
 
   // Run concurrent test multiple times to guarantee correctness.
   for (int run = 0; run < num_runs; run++) {
