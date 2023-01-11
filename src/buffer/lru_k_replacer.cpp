@@ -14,7 +14,6 @@
 #include <cassert>
 #include <cstddef>
 #include <list>
-#include <mutex>
 #include "common/config.h"
 #include "common/macros.h"
 
@@ -43,11 +42,12 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
+  std::scoped_lock<std::mutex> lock(latch_);
   // First check if frame_id is valid
   BUSTUB_ASSERT(frame_id >= 0 && frame_id < static_cast<frame_id_t>(replacer_size_), "Frame_id is invalid");
   // Find out if frame_id has not been seen before
   auto it = frames_.find(frame_id);
-  IncrementTimestamp();
+  ++current_timestamp_;
   if (it == frames_.end()) {
     frames_.emplace(frame_id, std::list<size_t>{current_timestamp_});
   } else {
@@ -60,6 +60,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
+  std::scoped_lock<std::mutex> lock(latch_);
   // First check if frame_id is valid
   BUSTUB_ASSERT(frame_id >= 0 && frame_id < static_cast<frame_id_t>(replacer_size_), "Frame_id is invalid");
   // If frame_id do not exist in frames, imediately return
@@ -92,11 +93,6 @@ auto LRUKReplacer::Size() -> size_t { return evictable_id_.size(); }
 
 // ******************************private******************************************
 
-auto LRUKReplacer::IncrementTimestamp() -> void {
-  std::scoped_lock<std::mutex> scoped_lock(latch_);
-  ++current_timestamp_;
-}
-
 auto LRUKReplacer::GetKthTime(frame_id_t frame_id) -> size_t {
   auto it = frames_.find(frame_id);
   assert(it != nullptr);
@@ -106,8 +102,8 @@ auto LRUKReplacer::GetKthTime(frame_id_t frame_id) -> size_t {
   // if size < 3
   if (list.size() < k_) {
     kth_time = 0x7ffffff - earliest + current_timestamp_;
-  }else {
-    kth_time = current_timestamp_-earliest;
+  } else {
+    kth_time = current_timestamp_ - earliest;
   }
   return kth_time;
 }

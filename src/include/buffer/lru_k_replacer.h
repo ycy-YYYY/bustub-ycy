@@ -144,8 +144,6 @@ class LRUKReplacer {
   std::unordered_map<frame_id_t, std::list<size_t>> frames_;
   std::set<frame_id_t> evictable_id_;
 
-  auto IncrementTimestamp() -> void;
-
   auto GetKthTime(frame_id_t frame_id) -> size_t;
 };
 

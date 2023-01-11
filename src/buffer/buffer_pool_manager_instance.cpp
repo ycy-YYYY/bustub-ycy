@@ -13,7 +13,6 @@
 #include "buffer/buffer_pool_manager_instance.h"
 #include <algorithm>
 #include <cstddef>
-#include <mutex>
 
 #include "common/config.h"
 #include "common/exception.h"
@@ -44,6 +43,7 @@ BufferPoolManagerInstance::~BufferPoolManagerInstance() {
 }
 
 auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
+  std::scoped_lock<std::mutex> lock(latch_);
   // 1) Check if freelist has element
   frame_id_t frame_id = 0;
   auto success = GetFrameIdFromFreeList(&frame_id);
@@ -55,7 +55,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     // Map new page id
     page_table_->Insert(*page_id, frame_id);
     // Access the pagepr
-    AccessPage(frame_id, page);
+    AccessPage(frame_id);
     return page;
   }
   // If there are any evictable pages
@@ -64,23 +64,25 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     *page_id = AllocatePage();
     // Evit the old page through lru-k
     success = EvictPageLRU(frame_id);
+    BUSTUB_ASSERT(success, "LRU evict failure");
     // Fetch the new page from disk
     auto page = FetchPageFromDisk(*page_id, frame_id);
     // Insert pageid -> frameid to hashmap
     page_table_->Insert(*page_id, frame_id);
     // Access the page
-    AccessPage(frame_id, page);
+    AccessPage(frame_id);
     return page;
   }
   return nullptr;
 }
 
 auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
+  std::scoped_lock<std::mutex> lock(latch_);
   // 1) First  fetch from the buffer pool
   frame_id_t frame_id = 0;
   auto success = page_table_->Find(page_id, frame_id);
   if (success) {
-    AccessPage(frame_id, &pages_[frame_id]);
+    AccessPage(frame_id);
     return &pages_[frame_id];
   }
   // 2) Find frame from free list, and fetch it from disk
@@ -90,48 +92,53 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     // Insert to hashmap
     page_table_->Insert(page_id, frame_id);
     // AccessPage
-    AccessPage(frame_id, page);
+    AccessPage(frame_id);
     return page;
   }
   // 3) Evict from lru-k
   if (replacer_->Size() > 0) {
     // Evict an old page and free the frame
     success = EvictPageLRU(frame_id);
+    BUSTUB_ASSERT(success, "Eviction error");
     // Fetch the new page from the disk
     auto page = FetchPageFromDisk(page_id, frame_id);
-    if (success) {
-      // Insert to hashmap
-      page_table_->Insert(page_id, frame_id);
-      // Access the page
-      AccessPage(frame_id, page);
-      return page;
-    }
+    // Insert to hashmap
+    page_table_->Insert(page_id, frame_id);
+    // Access the page
+    AccessPage(frame_id);
+    return page;
   }
 
   return nullptr;
 }
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
+  std::scoped_lock<std::mutex> lock(latch_);
   frame_id_t frame_id = 0;
   auto success = page_table_->Find(page_id, frame_id);
-  if (success) {
-    auto page = &pages_[frame_id];
-    page->WLatch();
-    if (page->pin_count_ != 0) {
-      page->is_dirty_ = is_dirty;
-      // If pin_count reach to zero, set evictable to true
-      if (--page->pin_count_ == 0) {
-        replacer_->SetEvictable(frame_id, true);
-      }
-      page->RUnlatch();
-      return true;
+  if (!success) {
+    return false;
+  }
+
+  auto page = &pages_[frame_id];
+  page->WLatch();
+  if (page->pin_count_ != 0) {
+    page->is_dirty_ = is_dirty;
+    // If pin_count reach to zero, set evictable to true
+    --(page->pin_count_);
+    if (page->pin_count_ == 0) {
+      replacer_->SetEvictable(frame_id, true);
     }
     page->WUnlatch();
+    return true;
   }
+  page->WUnlatch();
+
   return false;
 }
 
 auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
+  std::scoped_lock<std::mutex> lock(latch_);
   frame_id_t frame_id = 0;
   auto founded = page_table_->Find(page_id, frame_id);
   if (!founded) {
@@ -143,6 +150,7 @@ auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
 }
 
 void BufferPoolManagerInstance::FlushAllPgsImp() {
+  std::scoped_lock<std::mutex> lock(latch_);
   for (size_t i = 0; i < pool_size_; i++) {
     if (pages_[i].page_id_ == INVALID_PAGE_ID) {
       continue;
@@ -152,7 +160,7 @@ void BufferPoolManagerInstance::FlushAllPgsImp() {
 }
 
 auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
-  std::scoped_lock<std::mutex> lock (latch_);
+  std::scoped_lock<std::mutex> lock(latch_);
   frame_id_t frame_id = 0;
   auto founded = page_table_->Find(page_id, frame_id);
   // The page do not exist in the buffer pool
@@ -173,30 +181,30 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   // Delete key-value pair from hashmap
   page_table_->Remove(page_id);
   // Free the frame
+  replacer_->Remove(frame_id);
+  // Add to the freelist
   free_list_.emplace_back(frame_id);
+
   // Deallocate it from disk
   DeallocatePage(page_id);
   return true;
- }
+}
 
 auto BufferPoolManagerInstance::AllocatePage() -> page_id_t { return next_page_id_++; }
 
-void BufferPoolManagerInstance::AccessPage(frame_id_t frame_id, Page *page) {
+void BufferPoolManagerInstance::AccessPage(frame_id_t frame_id) {
   BUSTUB_ASSERT(frame_id < static_cast<frame_id_t>(pool_size_), "The frame_id is greater than buffer pool size");
-  std::scoped_lock<std::mutex> lock(latch_);
   // Update pin count
-  page->WLatch();
-  ++(page->pin_count_);
-  page->WUnlatch();
+  pages_[frame_id].WLatch();
+  pages_[frame_id].pin_count_++;
+  pages_[frame_id].WUnlatch();
   // Access record
   replacer_->RecordAccess(frame_id);
   // Set un-evictable
   replacer_->SetEvictable(frame_id, false);
 }
 
-
 auto BufferPoolManagerInstance::EvictPageLRU(frame_id_t &frame_id) -> bool {
-  std::scoped_lock<std::mutex> lock(latch_);
   // Get the frame id
   auto success = replacer_->Evict(&frame_id);
   if (!success) {
@@ -210,7 +218,6 @@ auto BufferPoolManagerInstance::EvictPageLRU(frame_id_t &frame_id) -> bool {
 }
 
 auto BufferPoolManagerInstance::GetFrameIdFromFreeList(frame_id_t *frame_id) -> bool {
-  std::scoped_lock<std::mutex> lock(latch_);
   if (free_list_.empty()) {
     return false;
   }
@@ -222,8 +229,11 @@ auto BufferPoolManagerInstance::FetchPageFromDisk(page_id_t page_id, frame_id_t 
   Page *page = &pages_[frame_id];
   // read data from disk
   page->WLatch();
+  page->ResetMemory();
   disk_manager_->ReadPage(page_id, page->data_);
   page->page_id_ = page_id;
+  page->pin_count_ = 0;
+  page->is_dirty_ = false;
   page->WUnlatch();
   return page;
 }

@@ -182,8 +182,6 @@ class BufferPoolManagerInstance : public BufferPoolManager {
 
   // TODO(student): You may add additional private members and helper functions
  private:
-  std::vector<Page *> reuse_pages_;  // Reuseble page objects
-  std::mutex reuse_pages_latch_;     // Latch protect reuse_pages
   /**
    * @brief Evict one page from the frame using the lru-k policy
    *
@@ -206,10 +204,9 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   /**
    * @brief Access a page in the buffer pool
    *        update the meta-data of the page, pin the page and access lru-k replacer and set it not evictable
-   * @param frame_id Insert place
-   * @param page The new page
+   * @param frame_id page index
    */
-  void AccessPage(frame_id_t frame_id, Page *page);
+  void AccessPage(frame_id_t frame_id);
 
   /**
    * @brief Fetch a page from disk, return the pointer to the page

@@ -23,7 +23,7 @@ namespace bustub {
 
 // NOLINTNEXTLINE
 // Check whether pages containing terminal characters can be recovered
-TEST(BufferPoolManagerInstanceTest,BinaryDataTest) {
+TEST(BufferPoolManagerInstanceTest, BinaryDataTest) {
   const std::string db_name = "test.db";
   const size_t buffer_pool_size = 10;
   const size_t k = 5;
@@ -89,7 +89,7 @@ TEST(BufferPoolManagerInstanceTest,BinaryDataTest) {
 }
 
 // NOLINTNEXTLINE
-TEST(BufferPoolManagerInstanceTest,SampleTest) {
+TEST(BufferPoolManagerInstanceTest, SampleTest) {
   const std::string db_name = "test.db";
   const size_t buffer_pool_size = 10;
   const size_t k = 5;
@@ -107,7 +107,7 @@ TEST(BufferPoolManagerInstanceTest,SampleTest) {
   // Scenario: Once we have a page, we should be able to read and write content.
   snprintf(page0->GetData(), BUSTUB_PAGE_SIZE, "Hello");
   EXPECT_EQ(0, strcmp(page0->GetData(), "Hello"));
-  
+
   // Scenario: We should be able to create new pages until we fill up the buffer pool.
   for (size_t i = 1; i < buffer_pool_size; ++i) {
     EXPECT_NE(nullptr, bpm->NewPage(&page_id_temp));
@@ -137,6 +137,10 @@ TEST(BufferPoolManagerInstanceTest,SampleTest) {
   EXPECT_NE(nullptr, bpm->NewPage(&page_id_temp));
   EXPECT_EQ(nullptr, bpm->FetchPage(0));
 
+  EXPECT_EQ(true, bpm->DeletePage(0));
+  EXPECT_EQ(false, bpm->DeletePage(5));
+  EXPECT_EQ(true, bpm->UnpinPage(5, true));
+  EXPECT_EQ(true, bpm->DeletePage(5));
   // Shutdown the disk manager and remove the temporary file we created.
   disk_manager->ShutDown();
   remove("test.db");

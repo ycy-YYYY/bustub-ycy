@@ -19,7 +19,6 @@
 #include <iterator>
 #include <list>
 #include <memory>
-#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -34,25 +33,22 @@ namespace bustub {
 using std::pair;
 
 template <typename K, typename V>
-ExtendibleHashTable<K, V>::ExtendibleHashTable(size_t bucket_size)
-    : global_depth_(1), bucket_size_(bucket_size), num_buckets_(2) {
+ExtendibleHashTable<K, V>::ExtendibleHashTable(size_t bucket_size) : bucket_size_(bucket_size), num_buckets_(1) {
   // LOG_INFO("HashTable Initialized, global_depth:%u , bucket_size:%zu , num of buckets:%u", global_depth_,
   // bucket_size,
   //          num_buckets_);
-  for (size_t i = 0; i < 2; i++) {
-    dir_.emplace_back(std::make_shared<Bucket>(bucket_size, global_depth_));
-  }
+  dir_.emplace_back(std::make_shared<Bucket>(bucket_size));
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::IndexOf(const K &key) -> size_t {
-  int mask = (1 << GetGlobalDepth()) - 1;
+  int mask = (1 << global_depth_) - 1;
   return std::hash<K>()(key) & mask;
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::GetGlobalDepth() const -> int {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   return GetGlobalDepthInternal();
 }
 
@@ -63,7 +59,7 @@ auto ExtendibleHashTable<K, V>::GetGlobalDepthInternal() const -> int {
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::GetLocalDepth(int dir_index) const -> int {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   return GetLocalDepthInternal(dir_index);
 }
 
@@ -74,7 +70,7 @@ auto ExtendibleHashTable<K, V>::GetLocalDepthInternal(int dir_index) const -> in
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::GetNumBuckets() const -> int {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   return GetNumBucketsInternal();
 }
 
@@ -85,34 +81,32 @@ auto ExtendibleHashTable<K, V>::GetNumBucketsInternal() const -> int {
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Find(const K &key, V &value) -> bool {
-  lock_.RLock();
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   auto index = IndexOf(key);
   if (!dir_[index]) {
     value = {};
-    lock_.RUnlock();
     return false;
   }
-  lock_.RUnlock();
   return dir_[index]->Find(key, value);
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Remove(const K &key) -> bool {
-  lock_.RLock();
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   size_t index = IndexOf(key);
-  assert(index < dir_.size());
-  if (!dir_[index]) {
-    lock_.RUnlock();
+  if (index >= dir_.size()) {
     return false;
   }
-  lock_.RUnlock();
+  if (!dir_[index]) {
+    return false;
+  }
   return dir_[index]->Remove(key);
 }
 
 template <typename K, typename V>
 void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   // First find the entry index
-  lock_.RLock();
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   size_t index = IndexOf(key);
   // If the bucket do not exist, initialize it and re-insert it
   // if (!dir_[index]) {
@@ -130,33 +124,27 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
   //   LOG_INFO("successfully insert key - value pair into bucket :%zu", index);
   // }
   if (success) {
-    lock_.RUnlock();
     return;
   }
-
-  lock_.RUnlock();
-  if (!success) {
-    lock_.WLock();
-    // Check whether the bucket is full
-    if (dir_[index]->IsFull()) {
-      // If global depth == local depth
-      if (GetGlobalDepth() == dir_[index]->GetDepth()) {
-        IncrementGlobalDepth();
-      }
-      // Split the current bucket and redistribute the pointer
-      dir_[index]->IncrementDepth();
-      // LOG_INFO("Redistribute bucket :%zu", index);
-      RedistributeBucket(dir_[index]);
-      // Re-insert the key-value pair
+  // Split bucket
+  // Check whether the bucket is full
+  if (dir_[index]->IsFull()) {
+    // If global depth == local depth
+    if (global_depth_ == dir_[index]->GetDepth()) {
+      IncrementGlobalDepth();
     }
-    lock_.WUnlock();
-    Insert(key, value);
+    // Split the current bucket and redistribute the pointer
+    dir_[index]->IncrementDepth();
+    // LOG_INFO("Redistribute bucket :%zu", index);
+    RedistributeBucket(dir_[index]);
+    // Re-insert the key-value pair
   }
+  Insert(key, value);
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void {
-  latch_.lock();
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   // Create a new bucket
   size_t bucket_depth = bucket->GetDepth();
 
@@ -176,7 +164,6 @@ auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucke
   auto list = bucket->GetItems();
   // Clear the original bucket
   bucket->Clear();
-  latch_.unlock();
 
   for (auto &[key, value] : list) {
     auto index = IndexOf(key);
@@ -186,7 +173,7 @@ auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucke
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::IncrementGlobalDepth() -> void {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   dir_.resize(2 * dir_.size());
   // Re-arrange the dir_ pointer
   for (size_t i = 0; i < dir_.size() / 2; ++i) {
@@ -198,7 +185,7 @@ auto ExtendibleHashTable<K, V>::IncrementGlobalDepth() -> void {
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::IncrementNumberOfBuckets() -> void {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
   ++num_buckets_;
 }
 
@@ -211,7 +198,6 @@ ExtendibleHashTable<K, V>::Bucket::Bucket(size_t array_size, int depth) : size_(
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Bucket::Find(const K &key, V &value) -> bool {
   bool finded = false;
-  latch_.RLock();
   for (auto &[k, v] : list_) {
     if (k == key) {
       value = v;
@@ -223,13 +209,11 @@ auto ExtendibleHashTable<K, V>::Bucket::Find(const K &key, V &value) -> bool {
   if (!finded) {
     value = {};
   }
-  latch_.RUnlock();
   return finded;
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Bucket::Remove(const K &key) -> bool {
-  latch_.WLock();
   bool finded = false;
 
   for (auto it = list_.begin(); it != list_.end();) {
@@ -240,7 +224,6 @@ auto ExtendibleHashTable<K, V>::Bucket::Remove(const K &key) -> bool {
     }
     it++;
   }
-  latch_.WUnlock();
   // The given key do not exsit, return false
   return finded;
 }
@@ -248,29 +231,23 @@ auto ExtendibleHashTable<K, V>::Bucket::Remove(const K &key) -> bool {
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Bucket::Insert(const K &key, const V &value) -> bool {
   // 1) If it is full
-  latch_.WLock();
   if (IsFull()) {
-    latch_.WUnlock();
     return false;
   }
 
   for (auto &pair : list_) {
     if (pair.first == key) {
       pair.second = value;
-      latch_.WUnlock();
       return true;
     }
   }
   list_.emplace_back(key, value);
-  latch_.WUnlock();
   return true;
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Bucket::Clear() -> void {
-  latch_.WLock();
   list_.clear();
-  latch_.WUnlock();
 }
 
 template class ExtendibleHashTable<page_id_t, Page *>;

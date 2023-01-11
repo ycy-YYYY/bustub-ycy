@@ -22,7 +22,7 @@ TEST(ExtendibleHashTableTest, SampleTest) {
   table->Insert(5, "e");
   EXPECT_EQ(3, table->GetNumBuckets());
   table->Insert(6, "f");
-  table->Insert(7, "g"); 
+  table->Insert(7, "g");
   table->Insert(8, "h");
   table->Insert(9, "i");
   EXPECT_EQ(2, table->GetLocalDepth(0));
@@ -84,7 +84,6 @@ TEST(ExtendibleHashTableTest, ConcurrentInsertTest) {
       } else {
         EXPECT_FALSE(table->Find(i, val));
       }
-      
     }
   }
 }
