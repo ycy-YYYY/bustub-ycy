@@ -54,8 +54,10 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   // 2) Allocate new page
   *page_id = AllocatePage();
 
-  // 3) Fetch the page from disk
-  FetchPageFromDisk(*page_id, frame_id);
+  // 3) Create a new page on the frame
+  pages_[frame_id].ResetMemory();
+  pages_[frame_id].page_id_ = *page_id;
+  pages_[frame_id].is_dirty_ = false;
   // 4) Record Access the page, and pin the page
   AccessPage(frame_id);
   // 5) Update Map in page_table
@@ -166,7 +168,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   // Free the frame
   replacer_->Remove(frame_id);
   // Add to the freelist
-  free_list_.emplace_back(frame_id);
+  free_list_.emplace_front(frame_id);
 
   // Deallocate it from disk
   DeallocatePage(page_id);
@@ -207,11 +209,13 @@ auto BufferPoolManagerInstance::FindFreeFrame(frame_id_t &frame_id) -> bool {
     if (pages_[frame_id].IsDirty()) {
       // If dirty, write it to disk
       WritePageToDisk(frame_id);
-      // Remove key-value pair in the map
-      page_table_->Remove(pages_[frame_id].GetPageId());
+      pages_[frame_id].is_dirty_ = false;
     }
+    // Remove key-value pair in the map
+    page_table_->Remove(pages_[frame_id].GetPageId());
     return true;
   }
   return false;
 }
+
 }  // namespace bustub
