@@ -183,30 +183,18 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   // TODO(student): You may add additional private members and helper functions
  private:
   /**
-   * @brief Evict one page from the frame using the lru-k policy
-   *
-   * @param[out] frame_id The empty frame id after eviction
-   * @return Return true if replace operation was success
-   */
-  auto EvictPageLRU(frame_id_t &frame_id) -> bool;
-
-  auto GetFrameIdFromFreeList(frame_id_t *frame_id) -> bool;
-
-  /**
-   * @brief If page is dirty, write page to disk, else return
-   *
-   * @param page
-   */
-  void RemoveOldPage(Page *page);
-
-  void DeleteOldPageDisk(Page *page);
-
-  /**
    * @brief Access a page in the buffer pool
    *        update the meta-data of the page, pin the page and access lru-k replacer and set it not evictable
    * @param frame_id page index
    */
-  void AccessPage(frame_id_t frame_id);
+  auto AccessPage(frame_id_t frame_id) -> void {
+    // Updata pin count
+    pages_[frame_id].pin_count_++;
+    // Record Access
+    replacer_->RecordAccess(frame_id);
+    // set it unevcitavle
+    replacer_->SetEvictable(frame_id, false);
+  }
 
   /**
    * @brief Fetch a page from disk, return the pointer to the page
@@ -214,20 +202,15 @@ class BufferPoolManagerInstance : public BufferPoolManager {
    * @param page_id,frame_id
    * @return Page*, the pointer to the page
    */
-  auto FetchPageFromDisk(page_id_t page_id, frame_id_t frame_id) -> Page *;
-
-  /**
-   * @brief Write page to disk and reset page memory, add page obj to the reuseble, this method should be called
-   *        after a page is evict or remove from the buffer pool
-   * @param page The pointer to the page
-   */
-  auto WritePageToDiskAndRemove(Page *page) -> void;
+  auto FetchPageFromDisk(page_id_t page_id, frame_id_t frame_id) -> void;
 
   /**
    * @brief Write the page to disk and unset dirty flag, this method should be called after flushing page
    *
-   * @param page
+   * @param frame_id
    */
-  auto WritePageToDisk(Page *page) -> void;
+  auto WritePageToDisk(frame_id_t frame_id) -> void;
+
+  auto FindFreeFrame(frame_id_t &frame_id) -> bool;
 };
 }  // namespace bustub
