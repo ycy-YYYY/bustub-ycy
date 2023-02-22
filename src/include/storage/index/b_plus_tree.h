@@ -10,14 +10,18 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <cstddef>
 #include <queue>
 #include <string>
 #include <vector>
 
+#include "common/config.h"
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
+#include "storage/page/page.h"
 
 namespace bustub {
 
@@ -39,8 +43,12 @@ class BPlusTree {
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
 
  public:
+  enum class SearchType { SEARCH, INSERT, DELETE };
+
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
                      int leaf_max_size = LEAF_PAGE_SIZE, int internal_max_size = INTERNAL_PAGE_SIZE);
+
+  void StartNewTree(const KeyType &key, const ValueType &value);
 
   // Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;
@@ -76,6 +84,21 @@ class BPlusTree {
 
  private:
   void UpdateRootPageId(int insert_record = 0);
+
+  /**
+   * @brief Helper method for search the leaf page according to key, using different lock policy based on Seachtype
+   *
+   * @param key
+   * @param comparator
+   * @param search-type
+   * @param [out] Locked pages in search path
+   * @return LeafPage*
+   */
+  auto SearchLeaf(const KeyType &key, KeyComparator comparator, SearchType type, std::vector<Page *> *) -> Page *;
+
+  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key, int last_unmodified_index);
+
+  auto Split(LeafPage *leaf, int &last_unmodified_index);
 
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;

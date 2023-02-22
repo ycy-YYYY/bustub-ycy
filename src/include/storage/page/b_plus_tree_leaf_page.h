@@ -49,6 +49,9 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
+  auto GetValue(const KeyType &key, ValueType &value, KeyComparator comparator) -> bool;
+  auto Insert(const KeyType &key, const ValueType &value, KeyComparator comparator) -> bool;
+  auto Merge(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> KeyType;
 
  private:
   page_id_t next_page_id_;

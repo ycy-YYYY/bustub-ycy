@@ -11,7 +11,10 @@
 #pragma once
 
 #include <queue>
+#include <vector>
 
+#include "common/config.h"
+#include "common/rid.h"
 #include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
@@ -41,6 +44,20 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto KeyAt(int index) const -> KeyType;
   void SetKeyAt(int index, const KeyType &key);
   auto ValueAt(int index) const -> ValueType;
+
+  auto GetChildPageId(const KeyType &key, KeyComparator comparator) -> page_id_t;
+
+  auto Insert(const KeyType &key, page_id_t page_id, KeyComparator comparator) -> bool;
+
+  auto Merge(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other) -> KeyType;
+
+  void CopyFirstHalf(const std::vector<MappingType> &tempArray);
+
+  void CopyLastHalf(const std::vector<MappingType> &tempArray);
+
+  void SetItem(int index, const KeyType &key, const ValueType &value);
+
+  auto GetAllItem() -> std::vector<MappingType> { return std::vector(array_, array_ + GetSize()); }
 
  private:
   // Flexible array member for page data.

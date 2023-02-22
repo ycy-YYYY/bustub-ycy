@@ -9,11 +9,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
 #include <sstream>
+#include <utility>
 
+#include "buffer/buffer_pool_manager.h"
 #include "common/exception.h"
 #include "common/rid.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 
@@ -27,16 +32,23 @@ namespace bustub {
  * next page id and set max size
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
+  SetPageId(page_id);
+  SetPageType(IndexPageType::LEAF_PAGE);
+  SetSize(0);
+  SetParentPageId(parent_id);
+  SetMaxSize(max_size);
+  SetLSN();
+}
 
 /**
  * Helper methods to set/get next page id
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t { return INVALID_PAGE_ID; }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t { return next_page_id_; }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_page_id_ = next_page_id; }
 
 /*
  * Helper method to find and return the key associated with input "index"(a.k.a
@@ -44,9 +56,48 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {}
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // replace with your own code
-  KeyType key{};
-  return key;
+  if (index < 0 || index > GetSize()) {
+    return {};
+  }
+  return array_[index].first;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &key, ValueType &value, KeyComparator comparator) -> bool {
+  auto it = std::find_if(array_,array_+GetSize(),[&key,comparator](auto p){return comparator(p.first,key) == 0;});
+  if(it == array_+ GetSize()){
+    return false;
+  }
+  value = it->second;
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator comparator) -> bool {
+  // If try to insert duplicate key, return false
+  auto count = std::count_if(array_,array_+GetSize(),[&key,comparator](auto pair){return comparator(pair.first,key) == 0;});
+  
+  // If exist duplicate key
+  if(count != 0){
+    return false;
+  }
+  
+  // Try to insert to the end and sort it
+  array_[GetSize()] = std::make_pair(key,value);
+  IncreaseSize(1);
+  std::sort(array_,array_+GetSize(),[comparator](auto p1, auto p2){return comparator(p1.first,p2.first) < 0;});
+
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other)->KeyType{
+  size_t size = GetMaxSize() - GetMinSize();
+  std::copy(array_+GetMinSize(),array_+GetMaxSize(),other->array_);
+
+  SetSize(GetMinSize());
+  other->SetSize(size);
+  return other->array_[0].first;
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
