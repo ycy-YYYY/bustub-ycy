@@ -238,26 +238,16 @@ auto BPLUSTREE_TYPE::InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPa
     return;
   }
 
-  auto *page =
+  InternalPage *page =
       reinterpret_cast<InternalPage *>(buffer_pool_manager_->FetchPage(oldPage->GetParentPageId())->GetData());
 
+  // In case child insertion was at left size
+
   if (page->GetSize() == page->GetMaxSize()) {
-    int insert_index = 0;
-    int left = 1;
-    int right = page->GetSize();
-    while (left < right) {
-      int mid = (right - left) / 2 + left;
-      if (comparator_(page->KeyAt(mid),key ) < 0) {
-        
-        left = mid + 1;
-      } else {
-        right = mid;
-      }
-    }
-    insert_index = left;
+    int insert_index = page->LookUp(key, comparator_);
     auto temp_array = page->GetAllItem();
     temp_array.resize(temp_array.size() + 1);
-    std::move_backward(temp_array.begin() + insert_index, temp_array.end(), temp_array.begin() + insert_index + 1);
+    std::move_backward(temp_array.begin() + insert_index, temp_array.end() - 1, temp_array.end());
     temp_array[insert_index] = std::make_pair(key, newPage->GetPageId());
     page_id_t new_internal_id = 0;
 
@@ -284,7 +274,9 @@ auto BPLUSTREE_TYPE::Split(LeafPage *leaf, int &last_unmodified_index) {
   assert(new_leaf != nullptr);
   new_leaf->Init(new_leaf_id, leaf->GetParentPageId(), leaf_max_size_);
   leaf->Merge(new_leaf);
+  new_leaf->SetNextPageId(leaf->GetNextPageId());
   leaf->SetNextPageId(new_leaf_id);
+
   buffer_pool_manager_->UnpinPage(new_leaf_id, true);
   InsertToParent(leaf, new_leaf, new_leaf->KeyAt(0), --last_unmodified_index);
 }

@@ -60,12 +60,27 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
   array_[index].first = key;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const KeyType &key, KeyComparator comparator) -> int {
+  int insert_index = 0;
+  int left = 1;
+  int right = GetSize();
+  while (left < right) {
+    int mid = (right - left) / 2 + left;
+    if (comparator(KeyAt(mid), key) < 0) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+  insert_index = left;
+  return insert_index;
+}
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
  */
-INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+INDEX_TEMPLATE_ARGUMENTS auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   if (index < 0 || index >= GetSize()) {
     return {};
   }
@@ -81,7 +96,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetChildPageId(const KeyType &key, KeyCompa
       break;
     }
   }
-  return array_[i-1].second;
+  return array_[i - 1].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
