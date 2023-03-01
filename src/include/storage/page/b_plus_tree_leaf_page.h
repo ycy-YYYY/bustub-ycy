@@ -53,6 +53,11 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator comparator) -> bool;
   auto Merge(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> KeyType;
 
+  void FitIn(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other);
+
+  void Redestribute(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other);
+  auto Remove(const KeyType &key, KeyComparator comparator) -> bool;
+
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.

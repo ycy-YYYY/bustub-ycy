@@ -20,7 +20,7 @@
 
 namespace bustub {
 
-TEST(BPlusTreeTests,InsertTest1) {
+TEST(BPlusTreeTests, InsertTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -83,7 +83,7 @@ TEST(BPlusTreeTests, InsertTest2) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  std::vector<int64_t> keys = {10,9,8,7,1,3,5,5,5,4};
+  std::vector<int64_t> keys = {10, 9, 8, 7, 1, 3, 5, 5, 5, 4};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);

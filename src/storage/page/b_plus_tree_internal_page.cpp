@@ -13,12 +13,15 @@
 #include <cassert>
 #include <cstddef>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <utility>
 
+#include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/exception.h"
 #include "storage/page/b_plus_tree_internal_page.h"
+#include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
 #include "type/value.h"
 
@@ -76,6 +79,13 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const KeyType &key, KeyComparator co
   insert_index = left;
   return insert_index;
 }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const ValueType &value) -> int {
+  auto it = std::find_if(array_, array_ + GetSize(), [&value](auto pair) { return pair.second == value; });
+  return it - array_;
+}
+
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
@@ -112,12 +122,48 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, page_id_t page_i
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Merge(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other) -> KeyType {
-  size_t size = GetSize() - GetMinSize();
-  std::copy(array_ + GetMinSize(), array_ + GetSize(), other->array_);
-  SetSize(GetMinSize());
-  other->SetSize(size);
-  return other->KeyAt(0);
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FitIn(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
+                                           BufferPoolManager *buffer_pool_manager) -> void {
+  int len = other->GetSize();
+  std::move(other->array_, other->array_ + len, array_ + GetSize());
+  for (int i = GetSize(); i < GetSize() + len; i++) {
+    auto *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
+    child->SetParentPageId(GetPageId());
+    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+  }
+  IncreaseSize(len);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Redistribute(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
+                                                  BufferPoolManager *buffer_pool_manager) {
+  if (GetSize() < other->GetSize()) {
+    int len = GetMinSize() - GetSize();
+    assert(len > 0);
+    std::move(other->array_, other->array_ + len, array_ + GetSize());
+    for (int i = GetSize(); i < GetSize() + len; i++) {
+      auto *page = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
+      page->SetParentPageId(GetPageId());
+      buffer_pool_manager->UnpinPage(page->GetPageId(), true);
+    }
+    IncreaseSize(len);
+    std::move(other->array_ + len, other->array_ + other->GetSize(), other->array_);
+    other->SetSize(other->GetSize() - len);
+  } else {
+    int len = GetSize() - GetMinSize();
+    assert(len > 0);
+    std::move_backward(other->array_, other->array_ + other->GetSize(), other->array_ + len);
+    std::move(array_ + GetMinSize(), array_ + GetSize(), other->array_);
+
+    for (int i = 0; i < len; i++) {
+      auto *page =
+          reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(other->array_[i].second)->GetData());
+      page->SetParentPageId(other->GetPageId());
+      buffer_pool_manager->UnpinPage(page->GetPageId(), true);
+    }
+    other->IncreaseSize(len);
+    SetSize(GetSize() - len);
+  }
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -137,6 +183,18 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastHalf(const std::vector<MappingType> &tempArray) {
   std::copy(tempArray.begin() + GetMinSize(), tempArray.end() + GetMinSize(), array_);
   SetSize(tempArray.end() - (tempArray.begin() + GetMinSize()));
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(const KeyType &key, KeyComparator comparator) {
+  int index = LookUp(key, comparator);
+  if (index == GetSize()) {
+    --index;
+  }
+  for (int i = index; i < GetSize() - 1; i++) {
+    array_[i] = array_[i + 1];
+  }
+  SetSize(GetSize() - 1);
 }
 
 // valuetype for internalNode should be page id_t

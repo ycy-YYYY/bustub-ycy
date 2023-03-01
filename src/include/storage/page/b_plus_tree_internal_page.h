@@ -13,6 +13,7 @@
 #include <queue>
 #include <vector>
 
+#include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/rid.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -47,12 +48,17 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto ValueAt(int index) const -> ValueType;
 
   auto LookUp(const KeyType &key, KeyComparator comparator) -> int;
+  auto LookUp(const ValueType &value) -> int;
 
   auto GetChildPageId(const KeyType &key, KeyComparator comparator) -> page_id_t;
 
   auto Insert(const KeyType &key, page_id_t page_id, KeyComparator comparator) -> bool;
 
-  auto Merge(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other) -> KeyType;
+  auto FitIn(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other, BufferPoolManager *buffer_pool_manager)
+      -> void;
+
+  void Redistribute(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
+                    BufferPoolManager *buffer_pool_manager);
 
   void CopyFirstHalf(const std::vector<MappingType> &tempArray);
 
@@ -61,6 +67,8 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetItem(int index, const KeyType &key, const ValueType &value);
 
   auto GetAllItem() -> std::vector<MappingType> { return std::vector(array_, array_ + GetSize()); }
+
+  void Remove(const KeyType &key, KeyComparator comparator);
 
  private:
   // Flexible array member for page data.

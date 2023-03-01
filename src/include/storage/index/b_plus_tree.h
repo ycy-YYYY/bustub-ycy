@@ -94,11 +94,24 @@ class BPlusTree {
    * @param [out] Locked pages in search path
    * @return LeafPage*
    */
-  auto SearchLeaf(const KeyType &key, KeyComparator comparator, SearchType type, std::vector<Page *> *) -> Page *;
+  auto SearchLeaf(const KeyType &key, KeyComparator comparator, SearchType type) -> Page *;
 
-  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key, int last_unmodified_index);
+  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key);
 
-  auto Split(LeafPage *leaf, int &last_unmodified_index);
+  auto Split(LeafPage *leaf);
+
+  /**
+   * @brief Remove the entry from the current page and if page size
+   *        is less than minsize, consider merge with neibour or
+   *        redistribute the pair and reset parent's key
+   * @param key
+   * @param page
+   */
+  void RemoveEntry(const KeyType &key, LeafPage *leaf);
+
+  void RemoveEntry(const KeyType &key, InternalPage *internal);
+
+  void UnlockPages(Transaction *transaction, bool isUpper);
 
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
