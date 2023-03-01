@@ -111,7 +111,13 @@ TEST(BPlusTreeTests, DeleteTest2) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+  int scale = 1000;
+
+  std::vector<int64_t> keys = {};
+  keys.reserve(scale);
+  for (int i = 1; i <= scale; i++) {
+    keys.push_back(i);
+  }
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
@@ -130,7 +136,12 @@ TEST(BPlusTreeTests, DeleteTest2) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
-  std::vector<int64_t> remove_keys = {1, 5, 3, 4};
+  std::vector<int64_t> remove_keys = {};
+  int remove_scale = 41;
+  for (int i = remove_scale; i <= scale; i++) {
+    remove_keys.emplace_back(i);
+  }
+
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
@@ -154,7 +165,7 @@ TEST(BPlusTreeTests, DeleteTest2) {
     }
   }
 
-  EXPECT_EQ(size, 1);
+  EXPECT_EQ(size, 40);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete transaction;

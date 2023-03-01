@@ -62,7 +62,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   void CopyFirstHalf(const std::vector<MappingType> &tempArray);
 
-  void CopyLastHalf(const std::vector<MappingType> &tempArray);
+  void CopyLastHalf(const std::vector<MappingType> &tempArray, BufferPoolManager *buffer_pool_manager);
 
   void SetItem(int index, const KeyType &key, const ValueType &value);
 

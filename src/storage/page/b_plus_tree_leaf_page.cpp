@@ -98,10 +98,11 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> KeyType {
-  size_t size = GetMaxSize() - GetMinSize();
-  std::copy(array_ + GetMinSize(), array_ + GetMaxSize(), other->array_);
+  int min_size = GetMaxSize() / 2;
+  size_t size = GetMaxSize() - min_size;
+  std::copy(array_ + min_size, array_ + GetMaxSize(), other->array_);
 
-  SetSize(GetMinSize());
+  SetSize(min_size);
   other->SetSize(size);
   return other->array_[0].first;
 }
@@ -117,7 +118,7 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::FitIn(BPlusTreeLeafPage<KeyType, ValueType, Key
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator comparator) -> bool {
   auto it = std::find_if(array_, array_ + GetSize(),
-                         [comparator, key](auto pair) { return comparator(pair.first, key) == 0; });
+                         [comparator, &key](auto pair) { return comparator(pair.first, key) == 0; });
   if (it == array_ + GetSize()) {
     return false;
   }

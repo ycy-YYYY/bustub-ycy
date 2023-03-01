@@ -152,7 +152,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Redistribute(BPlusTreeInternalPage<KeyType,
   } else {
     int len = GetSize() - GetMinSize();
     assert(len > 0);
-    std::move_backward(other->array_, other->array_ + other->GetSize(), other->array_ + len);
+    std::move(other->array_, other->array_ + other->GetSize(), other->array_ + len);
     std::move(array_ + GetMinSize(), array_ + GetSize(), other->array_);
 
     for (int i = 0; i < len; i++) {
@@ -176,13 +176,22 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetItem(int index, const KeyType &key, cons
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstHalf(const std::vector<MappingType> &tempArray) {
   std::for_each(array_, array_ + GetMaxSize(), [](auto &p) { p = {}; });
-  std::copy(tempArray.begin(), tempArray.begin() + GetMinSize(), array_);
-  SetSize(GetMinSize());
+  int size = (GetMaxSize() + 1) / 2;
+  std::copy(tempArray.begin(), tempArray.begin() + size, array_);
+  SetSize(size);
 }
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastHalf(const std::vector<MappingType> &tempArray) {
-  std::copy(tempArray.begin() + GetMinSize(), tempArray.end() + GetMinSize(), array_);
-  SetSize(tempArray.end() - (tempArray.begin() + GetMinSize()));
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastHalf(const std::vector<MappingType> &tempArray,
+                                                  BufferPoolManager *buffer_pool_manager) {
+  int size = (GetMaxSize() + 1) / 2;
+  std::copy(tempArray.begin() + size, tempArray.end() + size, array_);
+  SetSize(tempArray.end() - (tempArray.begin() + size));
+  // For the new split node, we need to reset chilren node's parent id
+  for (int i = 0; i < GetSize(); i++) {
+    auto *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
+    child->SetParentPageId(GetPageId());
+    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+  }
 }
 
 INDEX_TEMPLATE_ARGUMENTS
