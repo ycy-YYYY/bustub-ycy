@@ -13,7 +13,10 @@
  * For range scan of b+ tree
  */
 #pragma once
+#include "buffer/buffer_pool_manager.h"
+#include "storage/index/index.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/page.h"
 
 namespace bustub {
 
@@ -21,9 +24,13 @@ namespace bustub {
 
 INDEX_TEMPLATE_ARGUMENTS
 class IndexIterator {
+  using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
+
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
+  IndexIterator(Page* page, int index, BufferPoolManager* buffer_pool_manager);
+  
   ~IndexIterator();  // NOLINT
 
   auto IsEnd() -> bool;
@@ -38,6 +45,10 @@ class IndexIterator {
 
  private:
   // add your own private member variables here
+  Page *page_;  // Point to current page
+  LeafPage *leaf_;
+  int index_;  // Specify current position in the leaf page
+  BufferPoolManager *buffer_pool_manager_
 };
 
 }  // namespace bustub

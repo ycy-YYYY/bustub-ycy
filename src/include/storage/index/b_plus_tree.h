@@ -11,7 +11,10 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
+#include <mutex>
 #include <queue>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -94,11 +97,20 @@ class BPlusTree {
    * @param [out] Locked pages in search path
    * @return LeafPage*
    */
-  auto SearchLeaf(const KeyType &key, KeyComparator comparator, SearchType type) -> Page *;
+  auto SearchLeaf(const KeyType &key, KeyComparator comparator, SearchType type, Transaction *transaction) -> Page *;
 
-  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key);
+  /**
+   * @brief Search leaf overloading for read-only operation
+   * 
+   * @param key 
+   * @param comparator 
+   * @return Page* 
+   */
+  auto SearchLeaf(const KeyType &key, KeyComparator comparator)->Page*;
 
-  auto Split(LeafPage *leaf);
+  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key, std::deque<Page *> path);
+
+  auto Split(LeafPage *leaf,Transaction *tranction);
 
   /**
    * @brief Remove the entry from the current page and if page size
@@ -111,7 +123,11 @@ class BPlusTree {
 
   void RemoveEntry(const KeyType &key, InternalPage *internal);
 
-  void UnlockPages(Transaction *transaction, bool isUpper);
+  void UnlockPages(Transaction *transaction);
+
+  void LockPage(Page *page, SearchType type, Transaction *transaction);
+  
+  auto IsSafety(BPlusTreePage* page , SearchType type) -> bool;
 
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
@@ -125,6 +141,10 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
+
+  // When ever fetch the root page_id or fetch the root page,
+  // acquire for lock
+  mutable std::mutex root_lock_;
 };
 
 }  // namespace bustub

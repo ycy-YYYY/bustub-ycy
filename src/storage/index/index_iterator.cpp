@@ -3,7 +3,10 @@
  */
 #include <cassert>
 
+#include "buffer/buffer_pool_manager.h"
 #include "storage/index/index_iterator.h"
+#include "storage/page/b_plus_tree_page.h"
+#include "storage/page/page.h"
 
 namespace bustub {
 
@@ -15,13 +18,33 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
+INDEXITERATOR_TYPE::IndexIterator(Page *page, int index, BufferPoolManager *buffer_pool_manager)
+    : page_(page), index_(index), buffer_pool_manager_(buffer_pool_manager) {
+  assert(page != nullptr);
+  leaf_ = reinterpret_cast<LeafPage *>(page->GetData());
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool { throw std::runtime_error("unimplemented"); }
+INDEXITERATOR_TYPE::~IndexIterator(){
+    if(leaf_ == nullptr){
+        return;
+    }
+    
+    page_->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
+    
+    page_ = nullptr;
+    buffer_pool_manager_ = nullptr;
+}  // NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::operator*() -> const MappingType & { throw std::runtime_error("unimplemented"); }
+auto INDEXITERATOR_TYPE::IsEnd() -> bool { return leaf_ == nullptr; }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto INDEXITERATOR_TYPE::operator*() -> const MappingType & { 
+    assert(leaf_ != nullptr);
+        
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & { throw std::runtime_error("unimplemented"); }
