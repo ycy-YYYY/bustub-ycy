@@ -200,7 +200,7 @@ void BPLUSTREE_TYPE::MergeOrDistribute(LeafPage *leaf, std::deque<Page *> path, 
     assert(right != nullptr);
 
     // merge or redistribute
-    if (left->GetSize() + right->GetSize() <= left->GetMaxSize()) {
+    if (left->GetSize() + right->GetSize() < left->GetMaxSize()) {
       // merge left with right node
       KeyType key_tobe_delete = right->KeyAt(0);
       left->FitIn(right);
@@ -274,7 +274,7 @@ void BPLUSTREE_TYPE::RemoveEntry(const KeyType &key, InternalPage *internal, std
 
       // Either merge or redistribute need to set right's first key
       right->SetKeyAt(0, parent->KeyAt(bound_index));
-      if (left->GetSize() + right->GetSize() <= leaf_max_size_) {
+      if (left->GetSize() + right->GetSize() <= left->GetMaxSize()) {
         // First set right node's first key
 
         left->FitIn(right, buffer_pool_manager_);
@@ -352,8 +352,6 @@ auto BPLUSTREE_TYPE::SearchLeaf(const KeyType &key, KeyComparator comparator) ->
     Page *child_page = buffer_pool_manager_->FetchPage(next_page_id);
     child_page->RLatch();
 
-    assert(child_page->GetPinCount() == 1);
-
     // Unlock and unpin parent page
     page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
@@ -380,8 +378,6 @@ auto BPLUSTREE_TYPE::LeftMostChild() -> Page * {
     // Fetch and lock child page
     Page *child_page = buffer_pool_manager_->FetchPage(next_page_id);
     child_page->RLatch();
-
-    assert(child_page->GetPinCount() == 1);
 
     // Unlock and unpin parent page
     page->RUnlatch();

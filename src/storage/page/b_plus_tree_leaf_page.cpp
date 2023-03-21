@@ -86,19 +86,26 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) const -> const MappingType &
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator comparator) -> bool {
-  // If try to insert duplicate key, return false
-  auto count = std::count_if(array_, array_ + GetSize(),
-                             [&key, comparator](auto pair) { return comparator(pair.first, key) == 0; });
-
-  // If exist duplicate key
-  if (count != 0) {
-    return false;
+  int left = 0;
+  int right = GetSize();
+  while (left < right) {
+    int mid = (right + left) / 2;
+    if (comparator(array_[mid].first, key) == 0) {
+      return false;
+    }
+    if (comparator(array_[mid].first, key) < 0) {
+      left = mid + 1;
+    }
+    if (comparator(array_[mid].first, key) > 0) {
+      right = mid;
+    }
   }
+  int index = left;
 
   // Try to insert to the end and sort it
-  array_[GetSize()] = std::make_pair(key, value);
+  std::move_backward(array_ + index, array_ + GetSize(), array_ + GetSize() + 1);
+  array_[index] = std::make_pair(key, value);
   IncreaseSize(1);
-  std::sort(array_, array_ + GetSize(), [comparator](auto p1, auto p2) { return comparator(p1.first, p2.first) < 0; });
 
   return true;
 }
@@ -132,13 +139,26 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::FitIn(BPlusTreeLeafPage<KeyType, ValueType, Key
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator comparator) -> bool {
-  auto it = std::find_if(array_, array_ + GetSize(),
-                         [comparator, &key](auto pair) { return comparator(pair.first, key) == 0; });
-  if (it == array_ + GetSize()) {
+  int index = -1;
+  int left = 0;
+  int right = GetSize();
+  while (left < right) {
+    int mid = (left + right) / 2;
+    if (comparator(array_[mid].first, key) == 0) {
+      index = mid;
+      break;
+    }
+    if (comparator(array_[mid].first, key) < 0) {
+      left = mid + 1;
+    }
+    if (comparator(array_[mid].first, key) > 0) {
+      right = mid;
+    }
+  }
+  if (index < 0) {
     return false;
   }
 
-  size_t index = std::distance(array_, it);
   for (int i = index; i < GetSize() - 1; i++) {
     array_[i] = std::move(array_[i + 1]);
   }

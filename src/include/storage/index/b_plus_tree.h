@@ -14,7 +14,6 @@
 #include <deque>
 #include <queue>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "common/config.h"

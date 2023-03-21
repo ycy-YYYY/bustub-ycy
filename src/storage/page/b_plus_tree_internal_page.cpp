@@ -114,10 +114,13 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, page_id_t page_i
   if (GetSize() == GetMaxSize()) {
     return false;
   }
-  array_[GetSize()] = std::make_pair(key, page_id);
+  int index = std::distance(
+      array_, std::upper_bound(array_ + 1, array_ + GetSize(), key,
+                               [&comparator](const KeyType &value, auto p) { return comparator(value, p.first) < 0; }));
+  std::move_backward(array_ + index, array_ + GetSize(), array_ + 1 + GetSize());
+  array_[index] = std::make_pair(key, page_id);
   IncreaseSize(1);
-  std::sort(array_ + 1, array_ + GetSize(),
-            [comparator](auto p1, auto p2) { return comparator(p1.first, p2.first) < 0; });
+
   return true;
 }
 
@@ -139,7 +142,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Redistribute(BPlusTreeInternalPage<KeyType,
                                                   BufferPoolManager *buffer_pool_manager) {
   if (GetSize() < other->GetSize()) {
     int len = GetMinSize() - GetSize();
-    assert(len > 0);
     std::move(other->array_, other->array_ + len, array_ + GetSize());
     for (int i = GetSize(); i < GetSize() + len; i++) {
       auto *page = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
@@ -151,7 +153,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Redistribute(BPlusTreeInternalPage<KeyType,
     other->SetSize(other->GetSize() - len);
   } else {
     int len = GetSize() - GetMinSize();
-    assert(len > 0);
     std::move(other->array_, other->array_ + other->GetSize(), other->array_ + len);
     std::move(array_ + GetMinSize(), array_ + GetSize(), other->array_);
 
