@@ -28,9 +28,9 @@ class IndexIterator {
 
  public:
   // you may define your own constructor based on your member variables
-  IndexIterator();
-  IndexIterator(Page* page, int index, BufferPoolManager* buffer_pool_manager);
-  
+  IndexIterator() = default;
+  IndexIterator(Page *page, int index, BufferPoolManager *buffer_pool_manager);
+
   ~IndexIterator();  // NOLINT
 
   auto IsEnd() -> bool;
@@ -39,16 +39,16 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator==(const IndexIterator &itr) const -> bool { return leaf_ == itr.leaf_ && index_ == itr.index_; }
 
-  auto operator!=(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator!=(const IndexIterator &itr) const -> bool { return !((*this) == itr); }
 
  private:
   // add your own private member variables here
   Page *page_;  // Point to current page
   LeafPage *leaf_;
   int index_;  // Specify current position in the leaf page
-  BufferPoolManager *buffer_pool_manager_
+  BufferPoolManager *buffer_pool_manager_;
 };
 
 }  // namespace bustub

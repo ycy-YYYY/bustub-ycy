@@ -19,6 +19,7 @@
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/macros.h"
 #include "common/rid.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -78,6 +79,12 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &key, ValueType &value, 
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) const -> const MappingType & {
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Index out of bound");
+  return array_[index];
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator comparator) -> bool {
   // If try to insert duplicate key, return false
   auto count = std::count_if(array_, array_ + GetSize(),
@@ -105,6 +112,14 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(BPlusTreeLeafPage<KeyType, ValueType, Key
   SetSize(min_size);
   other->SetSize(size);
   return other->array_[0].first;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::LookUp(const KeyType &key, KeyComparator comparator) -> int {
+  auto it =
+      std::find_if(array_, array_ + GetSize(), [&key, &comparator](auto &p) { return comparator(key, p.first) == 0; });
+  BUSTUB_ASSERT(it != array_ + GetSize(), "Iterator error");
+  return std::distance(array_, it);
 }
 
 INDEX_TEMPLATE_ARGUMENTS

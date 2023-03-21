@@ -12,13 +12,13 @@
 
 #include <cstddef>
 #include <deque>
-#include <mutex>
 #include <queue>
-#include <shared_mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "common/config.h"
+#include "common/logger.h"
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_internal_page.h"
@@ -101,33 +101,51 @@ class BPlusTree {
 
   /**
    * @brief Search leaf overloading for read-only operation
-   * 
-   * @param key 
-   * @param comparator 
-   * @return Page* 
+   *
+   * @param key
+   * @param comparator
+   * @return Page*
    */
-  auto SearchLeaf(const KeyType &key, KeyComparator comparator)->Page*;
+  auto SearchLeaf(const KeyType &key, KeyComparator comparator) -> Page *;
 
-  void InsertToParent(BPlusTreePage *oldPage, BPlusTreePage *newPage, const KeyType &key, std::deque<Page *> path);
+  auto LeftMostChild() -> Page *;
 
-  auto Split(LeafPage *leaf,Transaction *tranction);
+  void InsertToParent(BPlusTreePage *oldChildPage, BPlusTreePage *newChildPage, const KeyType &key,
+                      std::deque<Page *> path);
+
+  auto Split(LeafPage *leaf, Transaction *tranction);
 
   /**
-   * @brief Remove the entry from the current page and if page size
+   * @brief  if page size
    *        is less than minsize, consider merge with neibour or
    *        redistribute the pair and reset parent's key
    * @param key
    * @param page
    */
-  void RemoveEntry(const KeyType &key, LeafPage *leaf);
+  void MergeOrDistribute(LeafPage *leaf, std::deque<Page *> path, Transaction *transaction);
 
-  void RemoveEntry(const KeyType &key, InternalPage *internal);
+  void RemoveEntry(const KeyType &key, InternalPage *internal, std::deque<Page *> &path, Transaction *transaction);
 
   void UnlockPages(Transaction *transaction);
 
+  void DeletePages(Transaction *transaction);
+
   void LockPage(Page *page, SearchType type, Transaction *transaction);
-  
-  auto IsSafety(BPlusTreePage* page , SearchType type) -> bool;
+
+  auto IsSafety(BPlusTreePage *page, SearchType type) -> bool;
+
+  void inline RootLock() {
+    root_lock_.lock();
+    current_lock_thread_ = std::this_thread::get_id();
+    locked_ = true;
+  }
+
+  void inline RootUnlock() {
+    if (locked_ && current_lock_thread_ == std::this_thread::get_id()) {
+      locked_ = false;
+      root_lock_.unlock();
+    }
+  }
 
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
@@ -141,10 +159,11 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
-
+  bool locked_{false};
   // When ever fetch the root page_id or fetch the root page,
   // acquire for lock
   mutable std::mutex root_lock_;
+  std::thread::id current_lock_thread_;
 };
 
 }  // namespace bustub

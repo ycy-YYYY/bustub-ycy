@@ -17,6 +17,7 @@
 #include <unordered_map>
 
 #include "buffer/lru_replacer.h"
+#include "common/logger.h"
 #include "recovery/log_manager.h"
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page.h"
@@ -64,6 +65,7 @@ class BufferPoolManager {
   /** Grading function. Do not modify! */
   auto NewPage(page_id_t *page_id, bufferpool_callback_fn callback = nullptr) -> Page * {
     GradingCallback(callback, CallbackType::BEFORE, INVALID_PAGE_ID);
+
     auto *result = NewPgImp(page_id);
     GradingCallback(callback, CallbackType::AFTER, *page_id);
     return result;
