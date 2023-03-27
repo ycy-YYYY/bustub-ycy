@@ -20,9 +20,11 @@
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/macros.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
+#include "storage/page/page.h"
 #include "type/value.h"
 
 namespace bustub {
@@ -49,9 +51,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  if (index < 0 || index >= GetSize()) {
-    return {};
-  }
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Illegal index");
   return array_[index].first;
 }
 
@@ -64,26 +64,43 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const KeyType &key, KeyComparator comparator) -> int {
-  int insert_index = 0;
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LowerBound(const KeyType &key, KeyComparator comparator) -> int {
+  int insert_index = -1;
   int left = 1;
   int right = GetSize();
   while (left < right) {
     int mid = (right - left) / 2 + left;
     if (comparator(KeyAt(mid), key) < 0) {
       left = mid + 1;
-    } else {
+    } else if (comparator(array_[mid].first, key) > 0) {
       right = mid;
+    } else {
+      insert_index = mid;
+      break;
     }
   }
-  insert_index = left;
+  insert_index = insert_index < 0 ? left : insert_index;
   return insert_index;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const ValueType &value) -> int {
-  auto it = std::find_if(array_, array_ + GetSize(), [&value](auto pair) { return pair.second == value; });
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetIndex(const KeyType &key, KeyComparator comparator) -> int {
+  return UpperBound(key, comparator) - 1;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, KeyComparator comparator) -> int {
+  auto it = std::upper_bound(array_ + 1, array_ + GetSize(), key,
+                             [comparator](const auto &value, const auto &p) { return comparator(value, p.first) < 0; });
   return it - array_;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetIndex(const ValueType &value) -> int {
+  auto it = std::find_if(array_, array_ + GetSize(), [&value](const auto &p) { return p.second == value; });
+  int dis = std::distance(array_, it);
+  BUSTUB_ASSERT(dis >= 0 && dis < GetSize(), "Index invalid");
+  return dis;
 }
 
 /*
@@ -91,22 +108,16 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookUp(const ValueType &value) -> int {
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
-  if (index < 0 || index >= GetSize()) {
-    return {};
-  }
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Wrong index");
   return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetChildPageId(const KeyType &key, KeyComparator comparator) -> page_id_t {
-  int i = 1;
-  for (; i < GetSize(); i++) {
-    auto temp = array_[i];
-    if (comparator(temp.first, key) > 0) {
-      break;
-    }
-  }
-  return array_[i - 1].second;
+  int index = UpperBound(key, comparator) - 1;
+
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Binary search err");
+  return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -114,10 +125,12 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, page_id_t page_i
   if (GetSize() == GetMaxSize()) {
     return false;
   }
-  int index = std::distance(
-      array_, std::upper_bound(array_ + 1, array_ + GetSize(), key,
-                               [&comparator](const KeyType &value, auto p) { return comparator(value, p.first) < 0; }));
-  std::move_backward(array_ + index, array_ + GetSize(), array_ + 1 + GetSize());
+  int index = LowerBound(key, comparator);
+
+  if (index < GetSize()) {
+    std::move_backward(array_ + index, array_ + GetSize(), array_ + 1 + GetSize());
+  }
+
   array_[index] = std::make_pair(key, page_id);
   IncreaseSize(1);
 
@@ -125,46 +138,62 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, page_id_t page_i
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FitIn(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
-                                           BufferPoolManager *buffer_pool_manager) -> void {
-  int len = other->GetSize();
-  std::move(other->array_, other->array_ + len, array_ + GetSize());
-  for (int i = GetSize(); i < GetSize() + len; i++) {
-    auto *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
-    child->SetParentPageId(GetPageId());
-    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
-  }
-  IncreaseSize(len);
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::BorrowFromPre(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                                                   BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent,
+                                                   int index, BufferPoolManager *buffer_pool_manager) {
+  BUSTUB_ASSERT(sibling->GetSize() <= sibling->GetMaxSize(), "Page currupted");
+  std::move_backward(array_, array_ + GetSize(), array_ + GetSize() + 1);
+  array_[0] = std::move(sibling->array_[sibling->GetSize() - 1]);
+
+  // Change moved child's parent id
+  auto *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[0].second)->GetData());
+  child->SetParentPageId(GetPageId());
+  buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+
+  // Update parent key
+  parent->SetKeyAt(index, array_[0].first);
+  IncreaseSize(1);
+  sibling->IncreaseSize(-1);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Redistribute(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
-                                                  BufferPoolManager *buffer_pool_manager) {
-  if (GetSize() < other->GetSize()) {
-    int len = GetMinSize() - GetSize();
-    std::move(other->array_, other->array_ + len, array_ + GetSize());
-    for (int i = GetSize(); i < GetSize() + len; i++) {
-      auto *page = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[i].second)->GetData());
-      page->SetParentPageId(GetPageId());
-      buffer_pool_manager->UnpinPage(page->GetPageId(), true);
-    }
-    IncreaseSize(len);
-    std::move(other->array_ + len, other->array_ + other->GetSize(), other->array_);
-    other->SetSize(other->GetSize() - len);
-  } else {
-    int len = GetSize() - GetMinSize();
-    std::move(other->array_, other->array_ + other->GetSize(), other->array_ + len);
-    std::move(array_ + GetMinSize(), array_ + GetSize(), other->array_);
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::BorrowFromNext(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                                                    BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent,
+                                                    int index, BufferPoolManager *buffer_pool_manager) {
+  BUSTUB_ASSERT(sibling->GetSize() <= sibling->GetMaxSize(), "Page currupted");
+  array_[GetSize()] = std::move(sibling->array_[0]);
+  std::move(sibling->array_ + 1, sibling->array_ + sibling->GetSize(), sibling->array_);
+  // Change moved child's parent id
 
-    for (int i = 0; i < len; i++) {
-      auto *page =
-          reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(other->array_[i].second)->GetData());
-      page->SetParentPageId(other->GetPageId());
-      buffer_pool_manager->UnpinPage(page->GetPageId(), true);
-    }
-    other->IncreaseSize(len);
-    SetSize(GetSize() - len);
+  auto *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(array_[GetSize()].second)->GetData());
+  child->SetParentPageId(GetPageId());
+  buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+
+  // Update parent key
+  parent->SetKeyAt(index + 1, sibling->array_[0].first);
+  IncreaseSize(1);
+  sibling->IncreaseSize(-1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MergeToPre(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                                                BufferPoolManager *buffer_pool_manager) {
+  BUSTUB_ASSERT(sibling->GetSize() + GetSize() <= sibling->GetMaxSize(), "Error");
+  // Move all the element to previous page
+  std::move(array_, array_ + GetSize(), sibling->array_ + sibling->GetSize());
+
+  // Update parent's link
+  for (int i = sibling->GetSize(); i < sibling->GetSize() + GetSize(); i++) {
+    auto *child =
+        reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(sibling->array_[i].second)->GetData());
+    child->SetParentPageId(sibling->GetPageId());
+    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
   }
+
+  // Marked 0 size for delete page
+
+  sibling->IncreaseSize(GetSize());
+  SetSize(0);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -176,16 +205,15 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetItem(int index, const KeyType &key, cons
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstHalf(const std::vector<MappingType> &tempArray) {
-  std::for_each(array_, array_ + GetMaxSize(), [](auto &p) { p = {}; });
   int size = (GetMaxSize() + 1) / 2;
-  std::copy(tempArray.begin(), tempArray.begin() + size, array_);
+  std::move(tempArray.begin(), tempArray.begin() + size, array_);
   SetSize(size);
 }
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastHalf(const std::vector<MappingType> &tempArray,
                                                   BufferPoolManager *buffer_pool_manager) {
   int size = (GetMaxSize() + 1) / 2;
-  std::copy(tempArray.begin() + size, tempArray.end() + size, array_);
+  std::move(tempArray.begin() + size, tempArray.end(), array_);
   SetSize(tempArray.end() - (tempArray.begin() + size));
   // For the new split node, we need to reset chilren node's parent id
   for (int i = 0; i < GetSize(); i++) {
@@ -196,14 +224,12 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastHalf(const std::vector<MappingType>
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(const KeyType &key, KeyComparator comparator) {
-  int index = LookUp(key, comparator);
-  if (index == GetSize()) {
-    --index;
-  }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Illegal key");
   for (int i = index; i < GetSize() - 1; i++) {
-    array_[i] = array_[i + 1];
+    array_[i] = std::move(array_[i + 1]);
   }
+  array_[GetSize() - 1] = {};
   SetSize(GetSize() - 1);
 }
 

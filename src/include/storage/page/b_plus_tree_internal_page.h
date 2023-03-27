@@ -47,18 +47,16 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetValueAt(int index, const ValueType &value);
   auto ValueAt(int index) const -> ValueType;
 
-  auto LookUp(const KeyType &key, KeyComparator comparator) -> int;
-  auto LookUp(const ValueType &value) -> int;
+  auto GetIndex(const ValueType &value) -> int;
+
+  auto LowerBound(const KeyType &key, KeyComparator comparator) -> int;
+  auto UpperBound(const KeyType &key, KeyComparator comparator) -> int;
+
+  auto GetIndex(const KeyType &key, KeyComparator comparator) -> int;
 
   auto GetChildPageId(const KeyType &key, KeyComparator comparator) -> page_id_t;
 
   auto Insert(const KeyType &key, page_id_t page_id, KeyComparator comparator) -> bool;
-
-  auto FitIn(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other, BufferPoolManager *buffer_pool_manager)
-      -> void;
-
-  void Redistribute(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *other,
-                    BufferPoolManager *buffer_pool_manager);
 
   void CopyFirstHalf(const std::vector<MappingType> &tempArray);
 
@@ -68,7 +66,17 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   auto GetAllItem() -> std::vector<MappingType> { return std::vector(array_, array_ + GetSize()); }
 
-  void Remove(const KeyType &key, KeyComparator comparator);
+  void Remove(int index);
+
+  void BorrowFromPre(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                     BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent, int index,
+                     BufferPoolManager *buffer_pool_manager);
+  void BorrowFromNext(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                      BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent, int index,
+                      BufferPoolManager *buffer_pool_manager);
+
+  void MergeToPre(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *sibling,
+                  BufferPoolManager *buffer_pool_manager);
 
  private:
   // Flexible array member for page data.

@@ -20,6 +20,7 @@
 
 #include "common/exception.h"
 #include "common/logger.h"
+#include "common/macros.h"
 #include "storage/disk/disk_manager.h"
 
 namespace bustub {
@@ -101,7 +102,9 @@ void DiskManager::ReadPage(page_id_t page_id, char *page_data) {
   int offset = page_id * BUSTUB_PAGE_SIZE;
   // check if read beyond file length
   if (offset > GetFileSize(file_name_)) {
+    LOG_DEBUG("Pageid = %d", page_id);
     LOG_DEBUG("I/O error reading past end of file");
+    BUSTUB_ASSERT(false, "Stop");
     // std::cerr << "I/O error while reading" << std::endl;
   } else {
     // set read cursor to offset

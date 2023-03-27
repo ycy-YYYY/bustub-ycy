@@ -19,6 +19,7 @@
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/macros.h"
 #include "common/rid.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
@@ -61,9 +62,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  if (index < 0 || index > GetSize()) {
-    return {};
-  }
+  BUSTUB_ASSERT(index >= 0 && index < GetSize(), "Illegal index");
   return array_[index].first;
 }
 
@@ -113,8 +112,9 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> KeyType {
   int min_size = GetMaxSize() / 2;
-  size_t size = GetMaxSize() - min_size;
-  std::copy(array_ + min_size, array_ + GetMaxSize(), other->array_);
+  BUSTUB_ASSERT(GetMaxSize() == GetSize(), "Size err");
+  size_t size = GetSize() - min_size;
+  std::move(array_ + min_size, array_ + GetSize(), other->array_);
 
   SetSize(min_size);
   other->SetSize(size);
@@ -123,22 +123,31 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(BPlusTreeLeafPage<KeyType, ValueType, Key
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::LookUp(const KeyType &key, KeyComparator comparator) -> int {
-  auto it =
-      std::find_if(array_, array_ + GetSize(), [&key, &comparator](auto &p) { return comparator(key, p.first) == 0; });
-  BUSTUB_ASSERT(it != array_ + GetSize(), "Iterator error");
-  return std::distance(array_, it);
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::FitIn(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> void {
-  std::move(std::begin(other->array_), other->array_ + other->GetSize(), array_ + GetSize());
-  IncreaseSize(other->GetSize());
-  next_page_id_ = other->next_page_id_;
-  assert(GetSize() < GetMaxSize());
+  int index = -1;
+  int left = 0;
+  int right = GetSize();
+  bool finded = false;
+  while (left < right) {
+    int mid = (left + right) / 2;
+    if (comparator(array_[mid].first, key) == 0) {
+      index = mid;
+      finded = true;
+      break;
+    }
+    if (comparator(array_[mid].first, key) < 0) {
+      left = mid + 1;
+    }
+    if (comparator(array_[mid].first, key) > 0) {
+      right = mid;
+    }
+  }
+  BUSTUB_ASSERT(finded, "The key doesn't exsit in leaf");
+  return index;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator comparator) -> bool {
+  BUSTUB_ASSERT(GetSize() > 0, "Size err");
   int index = -1;
   int left = 0;
   int right = GetSize();
@@ -150,41 +159,61 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator compar
     }
     if (comparator(array_[mid].first, key) < 0) {
       left = mid + 1;
-    }
-    if (comparator(array_[mid].first, key) > 0) {
+    } else {
       right = mid;
     }
   }
   if (index < 0) {
     return false;
   }
-
+  BUSTUB_ASSERT(index < GetSize(), "Index out of bound");
   for (int i = index; i < GetSize() - 1; i++) {
     array_[i] = std::move(array_[i + 1]);
   }
+  array_[GetSize() - 1] = {};
   SetSize(GetSize() - 1);
   return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::Redestribute(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other) -> void {
-  if (GetSize() < other->GetSize()) {
-    int left = GetSize();
-    int right = 0;
-    int minsize = GetMinSize();
-    while (other->GetSize() != minsize) {
-      array_[left++] = std::move(other->array_[right++]);
-      IncreaseSize(1);
-    }
-    std::move(other->array_ + right, other->array_ + other->GetSize(), other->array_);
-    other->SetSize(other->GetSize() - right);
-  } else {
-    int len = GetSize() - GetMinSize();
-    std::move_backward(other->array_, other->array_ + other->GetSize(), other->array_ + len);
-    std::move(array_ + GetMinSize(), array_ + GetSize(), array_);
-    SetSize(GetSize() - len);
-    other->IncreaseSize(len);
-  }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::BorrowFromPre(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling,
+                                               BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent,
+                                               int index) {
+  std::move_backward(array_, array_ + GetSize(), array_ + GetSize() + 1);
+  array_[0] = std::move(sibling->array_[sibling->GetSize() - 1]);
+
+  // Update key in parent
+  parent->SetKeyAt(index, array_[0].first);
+
+  IncreaseSize(1);
+  sibling->IncreaseSize(-1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::BorrowFromNext(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling,
+                                                BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent,
+                                                int index) {
+  array_[GetSize()] = std::move(sibling->array_[0]);
+  std::move(sibling->array_ + 1, sibling->array_ + sibling->GetSize(), sibling->array_);
+
+  // Update key in parent
+  parent->SetKeyAt(index + 1, sibling->array_[0].first);
+
+  IncreaseSize(1);
+  sibling->IncreaseSize(-1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MergeToPre(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling) {
+  BUSTUB_ASSERT(sibling->GetSize() < sibling->GetMaxSize(), "Page currupted");
+  std::move(array_, array_ + GetSize(), sibling->array_ + sibling->GetSize());
+
+  sibling->SetNextPageId(GetNextPageId());
+  SetNextPageId(INVALID_PAGE_ID);
+
+  // Marked 0 size for delete page
+  sibling->IncreaseSize(GetSize());
+  SetSize(0);
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;

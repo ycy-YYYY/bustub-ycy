@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
+#include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
@@ -56,10 +58,14 @@ class BPlusTreeLeafPage : public BPlusTreePage {
 
   auto LookUp(const KeyType &key, KeyComparator comparator) -> int;
 
-  void FitIn(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other);
-
-  void Redestribute(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *other);
   auto Remove(const KeyType &key, KeyComparator comparator) -> bool;
+
+  void BorrowFromPre(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling,
+                     BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent, int index);
+  void BorrowFromNext(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling,
+                      BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent, int index);
+
+  void MergeToPre(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *sibling);
 
  private:
   page_id_t next_page_id_;

@@ -16,6 +16,7 @@
 
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/macros.h"
 #include "storage/page/page.h"
 #include "storage/page/table_page.h"
@@ -79,6 +80,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   if (!finded) {
     return nullptr;
   }
+  BUSTUB_ASSERT(page_id != INVALID_PAGE_ID, "Fetch invalid page");
   // 3) Fetch the page from disk
   FetchPageFromDisk(page_id, frame_id);
   // 4) Record Access the page, and pin the page

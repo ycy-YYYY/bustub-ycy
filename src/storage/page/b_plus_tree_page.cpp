@@ -32,10 +32,7 @@ void BPlusTreePage::SetSize(int size) {
   BUSTUB_ASSERT(size >= 0, "Size less than zero");
   size_ = size;
 }
-void BPlusTreePage::IncreaseSize(int amount) {
-  BUSTUB_ASSERT(amount >= 0, "Increased amount less than zero");
-  size_ += amount;
-}
+void BPlusTreePage::IncreaseSize(int amount) { size_ += amount; }
 
 /*
  * Helper methods to get/set max size (capacity) of the page

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 
 #include "buffer/buffer_pool_manager_instance.h"
@@ -28,7 +29,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -39,7 +40,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+  std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
@@ -58,7 +59,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
-  std::vector<int64_t> remove_keys = {1, 5};
+  std::vector<int64_t> remove_keys = {8, 5, 6, 9, 7, 7, 7};
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
@@ -82,7 +83,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
     }
   }
 
-  EXPECT_EQ(size, 3);
+  EXPECT_EQ(size, 5);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete transaction;
@@ -110,14 +111,12 @@ TEST(BPlusTreeTests, DeleteTest2) {
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
-
-  int scale = 1000;
-
-  std::vector<int64_t> keys = {};
-  keys.reserve(scale);
-  for (int i = 1; i <= scale; i++) {
-    keys.push_back(i);
+  std::vector<int64_t> keys;
+  int64_t scale = 1000;
+  for (int64_t i = 0; i < scale; i++) {
+    keys.emplace_back(i);
   }
+
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
@@ -136,9 +135,9 @@ TEST(BPlusTreeTests, DeleteTest2) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
-  std::vector<int64_t> remove_keys = {};
-  int remove_scale = 41;
-  for (int i = remove_scale; i <= scale; i++) {
+  std::vector<int64_t> remove_keys;
+  int64_t remove_scale = 800;
+  for (int64_t i = 0; i < remove_scale; i++) {
     remove_keys.emplace_back(i);
   }
 
@@ -165,7 +164,7 @@ TEST(BPlusTreeTests, DeleteTest2) {
     }
   }
 
-  EXPECT_EQ(size, 40);
+  EXPECT_EQ(size, 200);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete transaction;
