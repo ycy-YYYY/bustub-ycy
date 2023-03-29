@@ -24,21 +24,20 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
     : AbstractExecutor(exec_ctx), plan_(plan) {}
 
 void SeqScanExecutor::Init() {
-  //   auto table_id = plan_->GetTableOid();
-  //   auto table_info = exec_ctx_->GetCatalog()->GetTable(table_id);
-  //   table_heap_ = &table_info->table_;
-  //   cur_it_ = std::make_unique<TableIterator>((*table_heap_)->Begin(exec_ctx_->GetTransaction()));
+  auto table_id = plan_->GetTableOid();
+  auto table_info = exec_ctx_->GetCatalog()->GetTable(table_id);
+  table_heap_ = &table_info->table_;
+  cur_it_ = std::make_unique<TableIterator>((*table_heap_)->Begin(exec_ctx_->GetTransaction()));
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  //   if (*cur_it_ == (*table_heap_)->End()) {
-  //     return false;
-  //   }
-  //   BUSTUB_ASSERT(tuple != nullptr && rid != nullptr, "Parameter can not be null");
-  //   *tuple = *(*cur_it_);
-  //   ++(*cur_it_);
-  //   *rid = tuple->GetRid();
-  //   return true;
+  if (*cur_it_ == (*table_heap_)->End()) {
+    return false;
+  }
+  BUSTUB_ASSERT(tuple != nullptr && rid != nullptr, "Parameter can not be null");
+  *tuple = *(*cur_it_);
+  ++(*cur_it_);
+  *rid = tuple->GetRid();
   return true;
 }
 
