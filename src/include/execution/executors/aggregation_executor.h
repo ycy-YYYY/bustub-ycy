@@ -74,10 +74,52 @@ class SimpleAggregationHashTable {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
+          // Count start starts at zero.
+          result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int32_t>() + 1);
+          break;
         case AggregationType::CountAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
+          //  if result is null, set it to 0
+          if (result->aggregates_[i].IsNull()) {
+            result->aggregates_[i] = ValueFactory::GetIntegerValue(0);
+          }
+          result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int32_t>() + 1);
+          break;
+
         case AggregationType::SumAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
+          //  if result is null, set it to 0
+          if (result->aggregates_[i].IsNull()) {
+            result->aggregates_[i] = ValueFactory::GetIntegerValue(0);
+          }
+          result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int32_t>() +
+                                                                 input.aggregates_[i].GetAs<int32_t>());
+          break;
         case AggregationType::MinAggregate:
+          // if input is null, skip
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
+          //  if result is null or input value is smaller than current value, set it to input value
+          if (result->aggregates_[i].IsNull() ||
+              input.aggregates_[i].GetAs<int32_t>() < result->aggregates_[i].GetAs<int32_t>()) {
+            result->aggregates_[i] = input.aggregates_[i];
+          }
+          break;
         case AggregationType::MaxAggregate:
+          // if input is null, skip
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
+          //  if result is null or input value is larger than current value, set it to input value
+          if (result->aggregates_[i].IsNull() ||
+              input.aggregates_[i].GetAs<int32_t>() > result->aggregates_[i].GetAs<int32_t>()) {
+            result->aggregates_[i] = input.aggregates_[i];
+          }
           break;
       }
     }
@@ -201,8 +243,9 @@ class AggregationExecutor : public AbstractExecutor {
   /** The child executor that produces tuples over which the aggregation is computed */
   std::unique_ptr<AbstractExecutor> child_;
   /** Simple aggregation hash table */
-  // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable aht_;
   /** Simple aggregation hash table iterator */
-  // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
+  bool is_empty_{true};
 };
 }  // namespace bustub

@@ -14,6 +14,7 @@
  */
 #pragma once
 #include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "storage/index/index.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/page.h"
@@ -29,9 +30,9 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator() = default;
-  IndexIterator(Page *page, int index, BufferPoolManager *buffer_pool_manager);
+  IndexIterator(page_id_t page_id, int index, BufferPoolManager *buffer_pool_manager);
 
-  ~IndexIterator();  // NOLINT
+  ~IndexIterator() = default;  // NOLINT
 
   auto IsEnd() -> bool;
 
@@ -39,15 +40,14 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { return leaf_ == itr.leaf_ && index_ == itr.index_; }
+  auto operator==(const IndexIterator &itr) const -> bool { return page_id_ == itr.page_id_ && index_ == itr.index_; }
 
   auto operator!=(const IndexIterator &itr) const -> bool { return !((*this) == itr); }
 
  private:
   // add your own private member variables here
-  Page *page_;  // Point to current page
-  LeafPage *leaf_;
-  int index_;  // Specify current position in the leaf page
+  page_id_t page_id_;  // Point to current page
+  int index_;          // Specify current position in the leaf page
   BufferPoolManager *buffer_pool_manager_;
 };
 

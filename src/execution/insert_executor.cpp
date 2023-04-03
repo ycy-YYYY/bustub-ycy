@@ -56,7 +56,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       auto schema = child_executor_->GetOutputSchema();
       auto key_schema = index_info->index_->GetKeySchema();
       auto key_tulpe = tuple->KeyFromTuple(schema, *key_schema, index_key_attrs);
-      index_info->index_->InsertEntry(key_tulpe, tuple->GetRid(), exec_ctx_->GetTransaction());
+      index_info->index_->InsertEntry(key_tulpe, *rid, exec_ctx_->GetTransaction());
     }
   }
 

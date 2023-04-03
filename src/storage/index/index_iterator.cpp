@@ -17,37 +17,35 @@ namespace bustub {
  */
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator(Page *page, int index, BufferPoolManager *buffer_pool_manager)
-    : page_(page), index_(index), buffer_pool_manager_(buffer_pool_manager) {
-  BUSTUB_ASSERT(page != nullptr, "Page is null");
-  leaf_ = reinterpret_cast<LeafPage *>(page->GetData());
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() {
-  if (leaf_ == nullptr) {
-    page_ = nullptr;
-    buffer_pool_manager_ = nullptr;
-    return;
-  }
-
-  page_->RUnlatch();
-  buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
-
-  page_ = nullptr;
-  buffer_pool_manager_ = nullptr;
-}  // NOLINT
+INDEXITERATOR_TYPE::IndexIterator(page_id_t page_id, int index, BufferPoolManager *buffer_pool_manager)
+    : page_id_(page_id), index_(index), buffer_pool_manager_(buffer_pool_manager) {}
+// NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() -> bool {
-  return leaf_->GetNextPageId() == INVALID_PAGE_ID && index_ == leaf_->GetSize();
+  if (page_id_ == 0 && index_ == 0) {
+    // If defalut constructor was called
+    return true;
+  }
+
+  Page *page = buffer_pool_manager_->FetchPage(page_id_);
+  page->RLatch();
+  auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
+  bool res = leaf->GetNextPageId() == INVALID_PAGE_ID && index_ == leaf->GetSize();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id_, false);
+  return res;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
-  BUSTUB_ASSERT(leaf_ != nullptr, "Dereferencing end iterator");
-  BUSTUB_ASSERT(index_ != leaf_->GetSize(), "Dereference end iter");
-  return leaf_->GetItem(index_);
+  Page *page = buffer_pool_manager_->FetchPage(page_id_);
+  page->RLatch();
+  auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
+  auto &item = leaf->GetItem(index_);
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id_, false);
+  return item;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -55,30 +53,26 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   // 1) Index at range
   // 2) Index out of bound, fetch next page
   // 3) reach the end
-  BUSTUB_ASSERT(index_ <= leaf_->GetSize(), "Size out of bound");
-  if (index_ < leaf_->GetSize() - 1) {
+
+  Page *page = buffer_pool_manager_->FetchPage(page_id_);
+  page->RLatch();
+  auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
+  page_id_t cur_page_id = page_id_;
+  if (index_ < leaf->GetSize() - 1) {
     index_++;
-    return *this;
+  } else {
+    page_id_t next_page_id = leaf->GetNextPageId();
+    if (next_page_id != INVALID_PAGE_ID) {
+      // update index to new page
+      page_id_ = next_page_id;
+      index_ = 0;
+    } else {
+      // reach to the end
+      index_++;
+    }
   }
-
-  page_id_t next_page_id = leaf_->GetNextPageId();
-  if (next_page_id != INVALID_PAGE_ID) {
-    // Fetch next page
-    Page *next_page = buffer_pool_manager_->FetchPage(next_page_id);
-    BUSTUB_ASSERT(next_page != nullptr, "Fetched a illegal page");
-    next_page->RLatch();
-
-    // release the current page
-    page_->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
-
-    page_ = next_page;
-    leaf_ = reinterpret_cast<LeafPage *>(page_->GetData());
-    index_ = 0;
-    return *this;
-  }
-
-  index_++;
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(cur_page_id, false);
   return *this;
 }
 

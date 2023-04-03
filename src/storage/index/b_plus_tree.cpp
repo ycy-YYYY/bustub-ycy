@@ -566,7 +566,13 @@ void BPLUSTREE_TYPE::DeletePages(Transaction *transaction) {
  */
 INDEX_TEMPLATE_ARGUMENTS auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
   Page *page = LeftMostChild();
-  return INDEXITERATOR_TYPE(page, 0, buffer_pool_manager_);
+  if (page == nullptr) {
+    return INDEXITERATOR_TYPE();
+  }
+  page_id_t page_id = page->GetPageId();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id, false);
+  return INDEXITERATOR_TYPE(page_id, 0, buffer_pool_manager_);
 }
 
 /*
@@ -579,7 +585,10 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   Page *page = SearchLeaf(key, comparator_);
   auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
   int index = leaf->LookUp(key, comparator_);
-  return INDEXITERATOR_TYPE(page, index, buffer_pool_manager_);
+  page_id_t page_id = page->GetPageId();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id, false);
+  return INDEXITERATOR_TYPE(page_id, index, buffer_pool_manager_);
 }
 
 /*
@@ -594,7 +603,10 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
     return INDEXITERATOR_TYPE();
   }
   auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
-  return INDEXITERATOR_TYPE(page, leaf->GetSize(), buffer_pool_manager_);
+  page_id_t page_id = page->GetPageId();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id, false);
+  return INDEXITERATOR_TYPE(page_id, leaf->GetSize(), buffer_pool_manager_);
 }
 
 /**
