@@ -60,6 +60,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   while (true) {
+    
     auto left_schema = left_executor_->GetOutputSchema();
     auto right_schema = right_executor_->GetOutputSchema();
     // if idx < size, then we can use the buffered right tuples
