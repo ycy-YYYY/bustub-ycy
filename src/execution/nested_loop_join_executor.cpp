@@ -54,13 +54,12 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (!left_executor_->Next(&left_tuple_, rid)) {
       return false;
     }
-    
+
     left_join_match_ = false;
     right_tuple_idx_ = 0;
   }
 
   while (true) {
-    
     auto left_schema = left_executor_->GetOutputSchema();
     auto right_schema = right_executor_->GetOutputSchema();
     // if idx < size, then we can use the buffered right tuples
@@ -83,7 +82,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
 
     // If no match in right table, consider left join
-    if (plan_->GetJoinType() == JoinType::LEFT && !left_join_match_ ) {
+    if (plan_->GetJoinType() == JoinType::LEFT && !left_join_match_) {
       std::vector<Value> output_values;
       for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {
         output_values.emplace_back(left_tuple_.GetValue(&left_schema, i));

@@ -12,7 +12,7 @@ void TopNExecutor::Init() {
   Tuple tuple;
   RID rid;
   child_executor_->Init();
-  
+
   while (child_executor_->Next(&tuple, &rid)) {
     tuples_.push_back(tuple);
   }

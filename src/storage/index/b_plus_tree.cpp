@@ -1,7 +1,6 @@
 
 #include <cassert>
 
-#include <mutex>
 #include <queue>
 #include <sstream>
 #include <string>
