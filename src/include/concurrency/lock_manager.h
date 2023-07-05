@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "common/rid.h"
 #include "concurrency/transaction.h"
+#include "type/type_id.h"
 
 namespace bustub {
 
@@ -64,7 +65,7 @@ class LockManager {
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    std::list<LockRequest *> request_queue_;
+    std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
     /** txn_id of an upgrading transaction (if any) */
@@ -314,6 +315,49 @@ class LockManager {
   /** Waits-for graph representation. */
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
   std::mutex waits_for_latch_;
+
+  auto IntentionLockRow(LockMode lock_mode) -> bool;
+  auto LockOnSharedOnReadUnCommitted(Transaction *txn, LockMode lock_mode) -> bool;
+  auto LockOnShrinking(Transaction *txn, LockMode lock_mode) -> bool;
+
+  /**
+   * @brief Get the Lock Request Queue object and lock the request latch
+   *
+   * @param rid
+   * @return std::shared_ptr<LockRequestQueue>
+   */
+  auto GetLockRequestQueue(RID rid) -> std::shared_ptr<LockRequestQueue>;
+  auto GetLockRequestQueue(table_oid_t oid) -> std::shared_ptr<LockRequestQueue>;
+
+  /**
+   * @brief
+   *
+   * @param txn
+   * @param [out] lock_mode The current lock mode
+   * @param oid
+   * @return true if table already locked
+   */
+  auto IsLockedByTransaction(Transaction *txn, LockMode &lock_mode, table_oid_t oid) -> bool;
+
+  auto IsLockedByTransaction(Transaction *txn, LockMode &lock_mode, table_oid_t oid, RID rid) -> bool;
+
+  auto IsIncompatibleUpgrade(LockMode lock_mode, LockMode current_lock_mode) -> bool;
+
+  auto InsertToTransactionLockSet(Transaction *txn, std::shared_ptr<LockRequest> lock_request, bool is_table) -> void;
+  auto RemoveFromTransactionLockSet(Transaction *txn, std::shared_ptr<LockRequest> lock_request, bool is_table) -> void;
+
+  /**
+   * @brief return true if the lock request is the first ungranted request and compatible with the lock request queue
+   *
+   * @param lock_request
+   * @param lock_request_queue
+   * @return true
+   * @return false
+   */
+  auto CheckCompatibility(std::shared_ptr<LockRequest> lock_request,
+                          std::shared_ptr<LockRequestQueue> lock_request_queue) -> bool;
+                          
+  auto IsCompatible(LockMode lock_mode, LockMode current_lock_mode) -> bool;
 };
 
 }  // namespace bustub
