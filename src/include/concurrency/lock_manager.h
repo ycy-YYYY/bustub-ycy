@@ -358,6 +358,53 @@ class LockManager {
                           std::shared_ptr<LockRequestQueue> lock_request_queue) -> bool;
                           
   auto IsCompatible(LockMode lock_mode, LockMode current_lock_mode) -> bool;
+  
+  /**
+   * @brief Check some common Incompatible Lock Mode
+   * 
+   * @param txn 
+   * @param lock_mode 
+   * @return true 
+   * @return false 
+   */
+  auto CheckCommonLockMode(Transaction *txn, LockMode lock_mode) -> void;
+  
+  /**
+   * @brief Throw Exception if txn is not holding a fit lock on the table
+   * used in lock row
+   * @param txn 
+   * @param lock_mode 
+   * @param oid 
+   */
+  void CheckTableLockWithRow(Transaction *txn, LockMode lock_mode, table_oid_t oid);
+  
+  /**
+   * @brief Check if txn is holding the lock
+   * 
+   * @param txn 
+   * @param oid 
+   * @param [out] lock_mode 
+   * @return true if txn is holding the lock
+   */
+  auto IsHodingLock(Transaction *txn, table_oid_t oid, LockMode &lock_mode) -> bool;
+  auto IsHodingLock(Transaction *txn, table_oid_t oid, RID rid, LockMode &lock_mode) -> bool;
+  
+  
+  void CheckLockOnRow(Transaction *txn, const table_oid_t &table_oid){
+    if(!txn->GetExclusiveRowLockSet()->empty() || !txn->GetSharedRowLockSet()->empty()){
+      // Abort
+      txn->SetState(TransactionState::ABORTED); 
+      throw TransactionAbortException(txn->GetTransactionId(), AbortReason::TABLE_UNLOCKED_BEFORE_UNLOCKING_ROWS);
+    }
+  }
+  
+  /**
+   * @brief Update the transaction state after unlock a row or table
+   * 
+   * @param txn 
+   * @param lock_mode 
+   */
+  void UpdateTranctionState(Transaction *txn,LockMode lock_mode);
 };
 
 }  // namespace bustub
