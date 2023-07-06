@@ -61,7 +61,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     new_request->granted_ = true;
     InsertToTransactionLockSet(txn, new_request, true);
     LOG_INFO("Grant the first lock to txn %d", txn->GetTransactionId());
-    printf("Loging");
+
     return true;
   }
 
