@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -33,7 +34,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
   LockMode cur_lock_mode;
   bool is_locked = IsLockedByTransaction(txn, cur_lock_mode, oid);
 
-  if (!is_locked || cur_lock_mode == lock_mode) {
+  if (is_locked && cur_lock_mode == lock_mode) {
     return true;
   }
 
@@ -77,14 +78,25 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
 
     lock_request_que->upgrading_ = txn->GetTransactionId();
 
+    // Find the previous granted request by the txn
     auto it = std::find_if(lock_request_que->request_queue_.begin(), lock_request_que->request_queue_.end(),
-                           [](const auto &request) { return !request->granted_; });
-    lock_request_que->request_queue_.emplace(it, new_request);
+                           [txn](const auto &request) { return request->txn_id_ == txn->GetTransactionId(); });
 
-  } else {
-    // If not need upgrade, add new request to the end of the queue
-    lock_request_que->request_queue_.emplace_back(new_request);
+    // Remove the previous granted request from txn lock set
+    RemoveFromTransactionLockSet(txn, *it, true);
+
+    // Replace the previous granted request with the upgrade request
+    *it = new_request;
+    // If it is a upgrade request, grant the updated lock immediately
+    new_request->granted_ = true;
+    InsertToTransactionLockSet(txn, new_request, true);
+
+    LOG_INFO("Grant upgrade lock to txn %d", txn->GetTransactionId());
+    return true;
   }
+
+  // If not need upgrade, add new request to the end of the queue
+  lock_request_que->request_queue_.emplace_back(new_request);
 
   // Check compatibility in Fifo order
   while (!CheckCompatibility(new_request, lock_request_que)) {
@@ -127,7 +139,9 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
   lock_request_que->request_queue_.erase(it);
   lock.unlock();
 
-  UpdateTranctionState(txn, cur_lock_mode);
+  if (txn->GetState() == TransactionState::GROWING) {
+    UpdateTranctionState(txn, cur_lock_mode);
+  }
 
   lock_request_que->cv_.notify_all();
   return true;
@@ -196,14 +210,21 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
 
     lock_request_que->upgrading_ = txn->GetTransactionId();
 
+    // Find the previous granted request by txn
     auto it = std::find_if(lock_request_que->request_queue_.begin(), lock_request_que->request_queue_.end(),
-                           [](const auto &request) { return !request->granted_; });
-    lock_request_que->request_queue_.emplace(it, new_request);
+                           [txn](const auto &request) { return request->txn_id_ == txn->GetTransactionId(); });
+    // Remove the previous granted request from txn lock set
+    RemoveFromTransactionLockSet(txn, *it, false);
 
-  } else {
-    // If not need upgrade, add new request to the end of the queue
-    lock_request_que->request_queue_.emplace_back(new_request);
+    // Replace the previous granted request with the upgrade request
+    *it = new_request;
+    // If it is a upgrade request, grant the updated lock immediately
+    new_request->granted_ = true;
+    InsertToTransactionLockSet(txn, new_request, false);
   }
+
+  // If not need upgrade, add new request to the end of the queue
+  lock_request_que->request_queue_.emplace_back(new_request);
 
   // Check compatibility in Fifo order
   while (!CheckCompatibility(new_request, lock_request_que)) {
@@ -244,7 +265,9 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
   lock_request_que->request_queue_.erase(it);
   lock.unlock();
 
-  UpdateTranctionState(txn, cur_lock_mode);
+  if (txn->GetState() == TransactionState::GROWING) {
+    UpdateTranctionState(txn, cur_lock_mode);
+  }
 
   lock_request_que->cv_.notify_all();
   return true;
@@ -264,10 +287,6 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
 
   // Remove t1 -> t2 edge from the graph
   waits_for_[t1].erase(std::remove(waits_for_[t1].begin(), waits_for_[t1].end(), t2), waits_for_[t1].end());
-
-  if (waits_for_[t1].empty()) {
-    waits_for_.erase(t1);
-  }
 }
 
 auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
@@ -280,21 +299,21 @@ auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
   // Using DFS to detect cycle
   std::unordered_set<txn_id_t> visited;
   std::stack<txn_id_t> rec_stack;
-  // Add first node to the stack
-  rec_stack.push(waits_for_.begin()->first);
+  // Add node with min txn_id to the stack
+  rec_stack.push(std::min_element(waits_for_.begin(), waits_for_.end())->first);
   while (!rec_stack.empty()) {
     txn_id_t curr = rec_stack.top();
     rec_stack.pop();
     // If the node is not visited, mark it as visited
     if (visited.find(curr) == visited.end()) {
       visited.insert(curr);
-    }
-    // If the node is visited, there is a cycle, return the newest txn_id
-    else {
+    } else {
       // Find the newest txn_id in the cycle
       *txn_id = *std::max_element(visited.begin(), visited.end());
       return true;
     }
+    /* Assuming waits_for[curr] is sorted*/
+    std::sort(waits_for_[curr].begin(), waits_for_[curr].end());
     // Add all the neighbour of the node to the stack
     for (auto neighbour : waits_for_[curr]) {
       rec_stack.push(neighbour);
@@ -319,6 +338,15 @@ void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
     {  // TODO(students): detect deadlock
+      std::scoped_lock<std::mutex> row_lock(row_lock_map_latch_);
+      std::scoped_lock<std::mutex> table_lock(table_lock_map_latch_);
+      BuildGrapgh();
+      txn_id_t txn_id;
+      if (HasCycle(&txn_id)) {
+        // Abort the txn
+        auto txn = GetTransaction(txn_id);
+      }
+      CleanGraph();
     }
   }
 }
@@ -354,11 +382,17 @@ auto LockManager::LockOnShrinking(Transaction *txn, LockMode lock_mode) -> bool 
 
 auto LockManager::GetLockRequestQueue(RID rid) -> std::shared_ptr<LockRequestQueue> {
   std::lock_guard<std::mutex> lock_guard(row_lock_map_latch_);
+  if (row_lock_map_.count(rid) == 0) {
+    row_lock_map_[rid] = std::make_shared<LockRequestQueue>();
+  }
   return row_lock_map_[rid];
 }
 
 auto LockManager::GetLockRequestQueue(table_oid_t oid) -> std::shared_ptr<LockRequestQueue> {
   std::lock_guard<std::mutex> lock(table_lock_map_latch_);
+  if (table_lock_map_.count(oid) == 0) {
+    table_lock_map_[oid] = std::make_shared<LockRequestQueue>();
+  }
   return table_lock_map_[oid];
 }
 
@@ -559,6 +593,7 @@ auto LockManager::IsCompatible(LockMode lock_mode, LockMode current_lock_mode) -
   if (lock_mode == LockMode::SHARED_INTENTION_EXCLUSIVE) {
     return current_lock_mode == LockMode::SHARED_INTENTION_EXCLUSIVE;
   }
+
   return false;
 }
 
@@ -704,5 +739,47 @@ void LockManager::UpdateTranctionState(Transaction *txn, LockMode lock_mode) {
 
       break;
   }
+}
+
+void LockManager::BuildGrapgh() {
+  for (const auto &que : table_lock_map_) {
+    const auto &request_queue = que.second->request_queue_;
+    if (request_queue.empty()) {
+      continue;
+    }
+    for (auto from = request_queue.crbegin(); from != request_queue.crend(); ++from) {
+      if ((*from)->granted_) {
+        break;
+      }
+      for (auto to = request_queue.begin(); to != request_queue.end(); ++to) {
+        if (!(*to)->granted_) {
+          break;
+        }
+        AddEdge((*from)->txn_id_, (*to)->txn_id_);
+      }
+    }
+  }
+  
+  // build graph from row lock map
+  for (const auto &que : row_lock_map_) {
+    const auto &request_queue = que.second->request_queue_;
+    if (request_queue.empty()) {
+      continue;
+    }
+    for (auto from = request_queue.crbegin(); from != request_queue.crend(); ++from) {
+      if ((*from)->granted_) {
+        break;
+      }
+      for (auto to = request_queue.begin(); to != request_queue.end(); ++to) {
+        if (!(*to)->granted_) {
+          break;
+        }
+        AddEdge((*from)->txn_id_, (*to)->txn_id_);
+      }
+    }
+  }
+}
+void LockManager::CleanGraph(){
+  waits_for_.clear();
 }
 }  // namespace bustub
