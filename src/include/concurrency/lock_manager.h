@@ -316,6 +316,9 @@ class LockManager {
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
   std::mutex waits_for_latch_;
 
+  /* Recording locks object that a txn requiring*/
+  std::unordered_map<txn_id_t, table_oid_t> requiring_table_lock_map_;
+  std::unordered_map<txn_id_t, RID> requiring_row_lock_map_;
   auto IntentionLockRow(LockMode lock_mode) -> bool;
   auto LockOnSharedOnReadUnCommitted(Transaction *txn, LockMode lock_mode) -> bool;
   auto LockOnShrinking(Transaction *txn, LockMode lock_mode) -> bool;
@@ -406,18 +409,20 @@ class LockManager {
    * @param lock_mode
    */
   void UpdateTranctionState(Transaction *txn, LockMode lock_mode);
-  
+
   /**
    * @brief Build the waits for graph
-   * 
+   *
    */
   void BuildGrapgh();
-  
+
   /**
    * @brief Clean the waits for graph
-   * 
+   *
    */
   void CleanGraph();
+  
+  void RemoveTxnFromGraph(txn_id_t txn_id);
 };
 
 }  // namespace bustub

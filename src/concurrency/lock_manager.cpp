@@ -338,14 +338,26 @@ void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
     {  // TODO(students): detect deadlock
-      std::scoped_lock<std::mutex> row_lock(row_lock_map_latch_);
-      std::scoped_lock<std::mutex> table_lock(table_lock_map_latch_);
+      row_lock_map_latch_.lock();
+      table_lock_map_latch_.lock();
       BuildGrapgh();
       txn_id_t txn_id;
-      if (HasCycle(&txn_id)) {
+      while (HasCycle(&txn_id)) {
         // Abort the txn
-        auto txn = GetTransaction(txn_id);
+        auto txn = TransactionManager::GetTransaction(txn_id);
+        txn->SetState(TransactionState::ABORTED);
+        // wake up the txn
+        if (requiring_row_lock_map_.count(txn_id) != 0) {
+          row_lock_map_[requiring_row_lock_map_[txn_id]]->cv_.notify_all();
+        }
+        if (requiring_table_lock_map_.count(txn_id) != 0) {
+          table_lock_map_[requiring_table_lock_map_[txn_id]]->cv_.notify_all();
+        }
+        // remove the txn from the graph
+        RemoveTxnFromGraph(txn_id);
       }
+      row_lock_map_latch_.unlock();
+      table_lock_map_latch_.unlock();
       CleanGraph();
     }
   }
@@ -742,8 +754,8 @@ void LockManager::UpdateTranctionState(Transaction *txn, LockMode lock_mode) {
 }
 
 void LockManager::BuildGrapgh() {
-  for (const auto &que : table_lock_map_) {
-    const auto &request_queue = que.second->request_queue_;
+  for (const auto &[table_oid, que] : table_lock_map_) {
+    const auto &request_queue = que->request_queue_;
     if (request_queue.empty()) {
       continue;
     }
@@ -756,13 +768,14 @@ void LockManager::BuildGrapgh() {
           break;
         }
         AddEdge((*from)->txn_id_, (*to)->txn_id_);
+        requiring_table_lock_map_[(*from)->txn_id_] = table_oid;
       }
     }
   }
-  
+
   // build graph from row lock map
-  for (const auto &que : row_lock_map_) {
-    const auto &request_queue = que.second->request_queue_;
+  for (const auto &[row_id, que] : row_lock_map_) {
+    const auto &request_queue = que->request_queue_;
     if (request_queue.empty()) {
       continue;
     }
@@ -775,11 +788,23 @@ void LockManager::BuildGrapgh() {
           break;
         }
         AddEdge((*from)->txn_id_, (*to)->txn_id_);
+        requiring_row_lock_map_[(*from)->txn_id_] = row_id;
       }
     }
   }
 }
-void LockManager::CleanGraph(){
+void LockManager::CleanGraph() {
   waits_for_.clear();
+  requiring_row_lock_map_.clear();
+  requiring_table_lock_map_.clear();
+}
+
+void LockManager::RemoveTxnFromGraph(txn_id_t txn_id) {
+  waits_for_.erase(txn_id);
+  requiring_row_lock_map_.erase(txn_id);
+  requiring_table_lock_map_.erase(txn_id);
+  for (auto &[it, vec] : waits_for_) {
+    vec.erase(std::remove(vec.begin(), vec.end(), txn_id), vec.end());
+  }
 }
 }  // namespace bustub
